@@ -5,11 +5,12 @@
  */
 
 // MODBUS
-export { ReadHoldingRegisters } from "./modbus/commands.ts";
+export { ReadHoldingRegisters, WriteHoldingRegisters } from "./modbus/commands.ts";
 export type { DeviceCommand } from "./modbus/commands.ts";
 
 // Bluetooth
 export { BluetoothClient, ModbusError, ChecksumError, TimeoutError } from "./bluetooth/client.ts";
+export type { ConnectionOptions } from "./bluetooth/client.ts";
 export {
   splitRanges,
   parseRegisterData,
@@ -22,7 +23,6 @@ export {
   BLUETTI_WRITE_UUID,
   BLUETTI_NOTIFY_UUID,
   RESPONSE_TIMEOUT_MS,
-  MAX_RETRIES,
   MAX_PACKET_SIZE,
   MAX_REGISTERS_PER_REQUEST,
 } from "./bluetooth/constants.ts";

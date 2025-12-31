@@ -1,15 +1,10 @@
 /**
  * Manual test page application logic.
  */
-import {
-  BluetoothClient,
-  ReadHoldingRegisters,
-  splitRanges,
-  parseRegisterData,
-  registerToUint16,
-} from "./main.ts";
+import { BluetoothClient, parseRegisterData, registerToUint16 } from "./main.ts";
 
-const client = new BluetoothClient();
+let client: BluetoothClient | null = null;
+
 const status = document.getElementById("status")!;
 const output = document.getElementById("output")!;
 const connectBtn = document.getElementById("connectBtn") as HTMLButtonElement;
@@ -25,7 +20,7 @@ function log(message: string): void {
 }
 
 function updateStatus(): void {
-  if (client.isConnected) {
+  if (client?.isConnected) {
     status.textContent = `Connected: ${client.deviceName || "Unknown"}`;
     status.className = "connected";
     connectBtn.disabled = true;
@@ -43,7 +38,11 @@ function updateStatus(): void {
 connectBtn.addEventListener("click", async () => {
   try {
     log("Requesting device...");
-    await client.requestAndConnect();
+    client = await BluetoothClient.request();
+    log(`Selected: ${client.deviceName}`);
+
+    log("Connecting...");
+    await client.connect();
     log(`Connected to: ${client.deviceName}`);
     updateStatus();
   } catch (error) {
@@ -52,12 +51,17 @@ connectBtn.addEventListener("click", async () => {
 });
 
 disconnectBtn.addEventListener("click", () => {
-  client.disconnect();
+  client?.disconnect();
   log("Disconnected");
   updateStatus();
 });
 
 readBtn.addEventListener("click", async () => {
+  if (!client) {
+    log("No device selected");
+    return;
+  }
+
   const startAddr = parseInt(startAddrInput.value, 10);
   const count = parseInt(countInput.value, 10);
 
@@ -69,20 +73,15 @@ readBtn.addEventListener("click", async () => {
   try {
     log(`Reading ${count} registers from address ${startAddr}...`);
 
-    const ranges = splitRanges([{ start: startAddr, count }]);
+    const data = await client.readRegisters(startAddr, count);
 
-    for (const range of ranges) {
-      const cmd = new ReadHoldingRegisters(range.start, range.count);
-      const data = await client.sendCommand(cmd);
-
-      const registers = parseRegisterData(range.start, data);
-      for (const reg of registers) {
-        const uint16 = registerToUint16(reg.value);
-        const hex = Array.from(reg.value)
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(" ");
-        log(`  [${reg.address}] = ${uint16} (0x${hex})`);
-      }
+    const registers = parseRegisterData(startAddr, data);
+    for (const reg of registers) {
+      const uint16 = registerToUint16(reg.value);
+      const hex = Array.from(reg.value)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join(" ");
+      log(`  [${reg.address}] = ${uint16} (0x${hex})`);
     }
 
     log("Read complete");

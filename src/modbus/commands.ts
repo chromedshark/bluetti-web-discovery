@@ -150,3 +150,65 @@ export class ReadHoldingRegisters extends DeviceCommand {
     return response.slice(3, -2);
   }
 }
+
+/**
+ * MODBUS Write Multiple Registers command (function code 0x10).
+ *
+ * Writes one or more 16-bit holding registers to the device.
+ */
+export class WriteHoldingRegisters extends DeviceCommand {
+  /** The starting register address */
+  readonly startingAddress: number;
+
+  /** The number of registers to write */
+  readonly quantity: number;
+
+  /**
+   * Creates a Write Multiple Registers command.
+   *
+   * @param startingAddress - The address of the first register to write
+   * @param data - The register values (2 bytes per register, big-endian)
+   * @throws Error if data length is not even
+   */
+  constructor(startingAddress: number, data: Uint8Array) {
+    if (data.length % 2 !== 0) {
+      throw new Error("Data length must be even (2 bytes per register)");
+    }
+
+    const quantity = data.length / 2;
+    const byteCount = data.length;
+
+    // Command data: [startAddr:2][quantity:2][byteCount:1][data:N]
+    const commandData = new Uint8Array(5 + byteCount);
+    const view = new DataView(commandData.buffer);
+    view.setUint16(0, startingAddress, false); // big-endian
+    view.setUint16(2, quantity, false); // big-endian
+    commandData[4] = byteCount;
+    commandData.set(data, 5);
+
+    super(0x10, commandData);
+
+    this.startingAddress = startingAddress;
+    this.quantity = quantity;
+  }
+
+  /**
+   * Returns the expected response size.
+   *
+   * Response format: [addr:1][fc:1][startAddr:2][qty:2][crc:2] = 8 bytes
+   */
+  responseSize(): number {
+    return 8;
+  }
+
+  /**
+   * Parses the response (returns empty array for write acknowledgment).
+   *
+   * @param _response - The complete response packet (unused)
+   * @returns Empty array (write responses contain no data)
+   */
+  parseResponse(): Uint8Array {
+    // Write response just echoes address/quantity, no data to return
+    return new Uint8Array(0);
+  }
+}

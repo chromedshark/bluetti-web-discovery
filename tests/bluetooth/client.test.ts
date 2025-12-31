@@ -6,26 +6,30 @@ mock.module("../../src/bluetooth/constants.ts", () => ({
   BLUETTI_WRITE_UUID: "0000ff02-0000-1000-8000-00805f9b34fb",
   BLUETTI_NOTIFY_UUID: "0000ff01-0000-1000-8000-00805f9b34fb",
   RESPONSE_TIMEOUT_MS: 50, // 50ms instead of 5000ms for faster tests
-  MAX_RETRIES: 5,
   MAX_PACKET_SIZE: 20,
   MAX_REGISTERS_PER_REQUEST: 7,
 }));
+
 import {
   BluetoothClient,
   ModbusError,
   ChecksumError,
   TimeoutError,
 } from "../../src/bluetooth/client.ts";
-import { ReadHoldingRegisters } from "../../src/modbus/commands.ts";
 import {
   MockBluetoothDevice,
   createMockBluetooth,
   createRange,
 } from "../../src/testing/mock-bluetooth-device.ts";
 
+async function connectedClient() {
+  const client = await BluetoothClient.request();
+  await client.connect();
+  return client;
+}
+
 describe("BluetoothClient", () => {
   let mockDevice: MockBluetoothDevice;
-  let client: BluetoothClient;
   let originalBluetooth: Bluetooth | undefined;
 
   beforeEach(() => {
@@ -51,8 +55,6 @@ describe("BluetoothClient", () => {
       value: createMockBluetooth(mockDevice),
       configurable: true,
     });
-
-    client = new BluetoothClient();
   });
 
   afterEach(() => {
@@ -65,51 +67,63 @@ describe("BluetoothClient", () => {
     }
   });
 
-  describe("connection", () => {
-    test("connects to device via requestAndConnect", async () => {
-      expect(client.isConnected).toBe(false);
-      expect(client.deviceName).toBeNull();
+  describe("request()", () => {
+    test("returns client instance with device but not connected", async () => {
+      const client = await BluetoothClient.request();
 
-      await client.requestAndConnect();
+      expect(client.deviceName).toBe("AC300Test");
+      expect(client.isConnected).toBe(false);
+    });
+  });
+
+  describe("connect()", () => {
+    test("connects to GATT server", async () => {
+      const client = await BluetoothClient.request();
+      expect(client.isConnected).toBe(false);
+
+      await client.connect();
 
       expect(client.isConnected).toBe(true);
-      expect(client.deviceName).toBe("AC300Test");
     });
 
+    test("can reconnect after disconnect", async () => {
+      const client = await BluetoothClient.request();
+      await client.connect();
+      expect(client.isConnected).toBe(true);
+
+      client.disconnect();
+      expect(client.isConnected).toBe(false);
+
+      await client.connect();
+      expect(client.isConnected).toBe(true);
+    });
+  });
+
+  describe("disconnect()", () => {
     test("disconnects from device", async () => {
-      await client.requestAndConnect();
+      const client = await connectedClient();
       expect(client.isConnected).toBe(true);
 
       client.disconnect();
 
       expect(client.isConnected).toBe(false);
-      expect(client.deviceName).toBeNull();
-    });
-
-    test("throws when sending command while disconnected", async () => {
-      const cmd = new ReadHoldingRegisters(0, 1);
-
-      await expect(client.sendCommand(cmd)).rejects.toThrow("Not connected");
+      // deviceName is still available (device reference kept)
+      expect(client.deviceName).toBe("AC300Test");
     });
   });
 
-  describe("sendCommand", () => {
-    beforeEach(async () => {
-      await client.requestAndConnect();
-    });
-
+  describe("readRegisters()", () => {
     test("reads single register", async () => {
-      const cmd = new ReadHoldingRegisters(0, 1);
-      const data = await client.sendCommand(cmd);
+      const client = await connectedClient();
+      const data = await client.readRegisters(0, 1);
 
       expect(data).toEqual(new Uint8Array([0x00, 0x64])); // 100
     });
 
     test("reads multiple registers", async () => {
-      const cmd = new ReadHoldingRegisters(0, 3);
-      const data = await client.sendCommand(cmd);
+      const client = await connectedClient();
+      const data = await client.readRegisters(0, 3);
 
-      // 3 registers * 2 bytes = 6 bytes
       expect(data.length).toBe(6);
       expect(data).toEqual(
         new Uint8Array([
@@ -124,8 +138,8 @@ describe("BluetoothClient", () => {
     });
 
     test("reads from different address", async () => {
-      const cmd = new ReadHoldingRegisters(10, 2);
-      const data = await client.sendCommand(cmd);
+      const client = await connectedClient();
+      const data = await client.readRegisters(10, 2);
 
       expect(data).toEqual(
         new Uint8Array([
@@ -138,125 +152,107 @@ describe("BluetoothClient", () => {
     });
 
     test("returns zeros for uninitialized registers", async () => {
-      const cmd = new ReadHoldingRegisters(50, 2);
-      const data = await client.sendCommand(cmd);
+      const client = await connectedClient();
+      const data = await client.readRegisters(50, 2);
 
       expect(data).toEqual(new Uint8Array([0x00, 0x00, 0x00, 0x00]));
+    });
+
+    test("throws when response would exceed packet size", async () => {
+      const client = await connectedClient();
+      // 8 registers = 21 byte response, exceeds 20 byte limit
+      await expect(client.readRegisters(0, 8)).rejects.toThrow(/exceeds max packet size/);
+    });
+  });
+
+  describe("writeRegisters()", () => {
+    test("writes single register", async () => {
+      const client = await connectedClient();
+      await client.writeRegisters(50, new Uint8Array([0x12, 0x34]));
+
+      // Read back to verify
+      const data = await client.readRegisters(50, 1);
+      expect(data).toEqual(new Uint8Array([0x12, 0x34]));
+    });
+
+    test("writes multiple registers", async () => {
+      const client = await connectedClient();
+      await client.writeRegisters(50, new Uint8Array([0x11, 0x22, 0x33, 0x44]));
+
+      const data = await client.readRegisters(50, 2);
+      expect(data).toEqual(new Uint8Array([0x11, 0x22, 0x33, 0x44]));
+    });
+
+    test("throws on odd data length", async () => {
+      const client = await connectedClient();
+      await expect(client.writeRegisters(50, new Uint8Array([0x12, 0x34, 0x56]))).rejects.toThrow(
+        /even/
+      );
+    });
+
+    test("throws when command exceeds packet size", async () => {
+      const client = await connectedClient();
+      // 9 + 12 = 21 > 20 (MAX_PACKET_SIZE)
+      await expect(client.writeRegisters(50, new Uint8Array(12))).rejects.toThrow(/too large/);
     });
   });
 
   describe("error handling", () => {
-    beforeEach(async () => {
-      await client.requestAndConnect();
-    });
-
     test("throws ModbusError for invalid address", async () => {
-      // Address 200 is outside readable range (0-99)
-      const cmd = new ReadHoldingRegisters(200, 1);
+      const client = await connectedClient();
 
-      await expect(client.sendCommand(cmd)).rejects.toBeInstanceOf(ModbusError);
+      // Address 200 is outside readable range (0-99)
+      await expect(client.readRegisters(200, 1)).rejects.toBeInstanceOf(ModbusError);
 
       try {
-        await client.sendCommand(cmd);
+        await client.readRegisters(200, 1);
       } catch (e) {
         expect(e).toBeInstanceOf(ModbusError);
         expect((e as ModbusError).exceptionCode).toBe(0x02); // ILLEGAL_DATA_ADDRESS
       }
     });
 
-    test("throws ChecksumError when CRC is corrupted", async () => {
-      mockDevice.injectCrcError();
+    test("throws ModbusError for write to non-writable address", async () => {
+      const client = await connectedClient();
 
-      const cmd = new ReadHoldingRegisters(0, 1);
-
-      // With retries, it should eventually throw ChecksumError after all retries fail
-      await expect(client.sendCommand(cmd, 1)).rejects.toBeInstanceOf(ChecksumError);
-    });
-
-    test("retries on checksum error and succeeds", async () => {
-      // Inject one CRC error, then succeed
-      mockDevice.injectCrcError(1);
-
-      const cmd = new ReadHoldingRegisters(0, 1);
-      const data = await client.sendCommand(cmd, 2); // Allow 2 attempts
-
-      expect(data).toEqual(new Uint8Array([0x00, 0x64]));
-    });
-
-    test("throws TimeoutError when device doesn't respond", async () => {
-      mockDevice.injectTimeout();
-
-      const cmd = new ReadHoldingRegisters(0, 1);
-
-      // Should timeout after retries exhausted (now only 50ms per attempt)
-      await expect(client.sendCommand(cmd, 1)).rejects.toBeInstanceOf(TimeoutError);
-    });
-
-    test("retries on timeout and succeeds", async () => {
-      // Inject one timeout, then succeed
-      mockDevice.injectTimeout(1);
-
-      const cmd = new ReadHoldingRegisters(0, 1);
-      const data = await client.sendCommand(cmd, 2); // Allow 2 attempts
-
-      expect(data).toEqual(new Uint8Array([0x00, 0x64]));
-    });
-
-    test("does not retry MODBUS errors", async () => {
-      // MODBUS errors should be thrown immediately without retry
-      const cmd = new ReadHoldingRegisters(200, 1); // Invalid address
-
-      // Even with many retries, it should fail on first attempt
-      await expect(client.sendCommand(cmd, 10)).rejects.toBeInstanceOf(ModbusError);
-    });
-
-    test("throws error when response exceeds max packet size", async () => {
-      // 8 registers = 21 bytes response, exceeds 20 byte limit
-      const cmd = new ReadHoldingRegisters(0, 8);
-
-      await expect(client.sendCommand(cmd)).rejects.toThrow(
-        "Response size 21 exceeds max packet size 20"
+      // Address 0 is readable but not writable
+      await expect(client.writeRegisters(0, new Uint8Array([0x12, 0x34]))).rejects.toBeInstanceOf(
+        ModbusError
       );
     });
 
-    test("allows 7 registers (19 byte response)", async () => {
-      // 7 registers = 19 bytes response, within limit
-      const cmd = new ReadHoldingRegisters(0, 7);
-      const data = await client.sendCommand(cmd);
+    test("throws ChecksumError when CRC is corrupted", async () => {
+      const client = await connectedClient();
+      mockDevice.injectCrcError();
 
-      expect(data.length).toBe(14); // 7 registers * 2 bytes
+      await expect(client.readRegisters(0, 1)).rejects.toBeInstanceOf(ChecksumError);
+    });
+
+    test("throws TimeoutError when device doesn't respond", async () => {
+      const client = await connectedClient();
+      mockDevice.injectTimeout();
+
+      await expect(client.readRegisters(0, 1)).rejects.toBeInstanceOf(TimeoutError);
     });
   });
 
-  describe("custom response override", () => {
-    beforeEach(async () => {
-      await client.requestAndConnect();
-    });
+  describe("integration tests", () => {
+    test("automatically reconnects", async() => {
+      const client = await connectedClient();
 
-    test("returns overridden response data", async () => {
-      // Override with a valid MODBUS response for 1 register
-      // [addr:1][fc:1][byteCount:1][data:2][crc:2]
-      const customResponse = new Uint8Array([
-        0x01,
-        0x03,
-        0x02,
-        0xab,
-        0xcd,
-        0x00,
-        0x00, // Placeholder CRC
-      ]);
+      // It doesn't consider itself disconnected until a failed command, which
+      // just times out
+      mockDevice.injectTimeout();
+      await expect(client.readRegisters(50, 1)).rejects.toBeInstanceOf(TimeoutError);
+      mockDevice.gatt.disconnect();
 
-      // Calculate correct CRC
-      const { crc16 } = await import("../../src/modbus/crc.ts");
-      const crc = crc16(customResponse.subarray(0, -2));
-      customResponse[5] = crc & 0xff;
-      customResponse[6] = (crc >> 8) & 0xff;
+      // Try a command again, this time with a failed connection
+      mockDevice.injectTimeout();
+      await expect(client.writeRegisters(50, new Uint8Array([0xab, 0xcd]))).rejects.toBeInstanceOf(TimeoutError);
 
-      mockDevice.overrideNextResponse(customResponse);
-
-      const cmd = new ReadHoldingRegisters(0, 1);
-      const data = await client.sendCommand(cmd);
-
+      // Finally try it and this time let it succeed
+      await client.writeRegisters(50, new Uint8Array([0xab, 0xcd]));
+      const data = await client.readRegisters(50, 1);
       expect(data).toEqual(new Uint8Array([0xab, 0xcd]));
     });
   });
