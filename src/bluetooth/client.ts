@@ -3,6 +3,7 @@ import {
   BLUETTI_WRITE_UUID,
   BLUETTI_NOTIFY_UUID,
   RESPONSE_TIMEOUT_MS,
+  INITIAL_ENCRYPTION_TIMEOUT_MS,
   MAX_PACKET_SIZE,
 } from "./constants.ts";
 import {
@@ -10,6 +11,9 @@ import {
   WriteHoldingRegisters,
   type DeviceCommand,
 } from "../modbus/commands.ts";
+import { HandshakeProtocol } from "../encryption/handshake.ts";
+import { aesEncrypt, aesDecrypt } from "../encryption/aes.ts";
+import type { KeyBundle } from "../encryption/key-bundle.ts";
 
 /**
  * Error thrown when a MODBUS exception response is received.
@@ -84,6 +88,7 @@ const withAbort = <T>(promise: Promise<T>, signal: AbortSignal): Promise<T> => {
  */
 export class BluetoothClient {
   private device: BluetoothDevice;
+  private keyBundle: KeyBundle | undefined;
 
   // Characteristics - wiped on disconnect, re-acquired on connect
   private writeCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
@@ -95,11 +100,15 @@ export class BluetoothClient {
     reject: (reason: Error) => void;
   } | null = null;
 
+  // Encryption support
+  private handshakeProtocol: HandshakeProtocol | null = null;
+
   /**
    * Private constructor - use `BluetoothClient.request()` to create instances.
    */
-  private constructor(device: BluetoothDevice) {
+  private constructor(device: BluetoothDevice, keyBundle?: KeyBundle) {
     this.device = device;
+    this.keyBundle = keyBundle;
     this.device.addEventListener("gattserverdisconnected", this.handleGattServerDisconnected);
   }
 
@@ -111,11 +120,11 @@ export class BluetoothClient {
    *
    * @throws DOMException if the user cancels or no device is found
    */
-  static async request(): Promise<BluetoothClient> {
+  static async request(keyBundle?: KeyBundle): Promise<BluetoothClient> {
     const device = await navigator.bluetooth.requestDevice({
       filters: [{ services: [BLUETTI_SERVICE_UUID] }],
     });
-    return new BluetoothClient(device);
+    return new BluetoothClient(device, keyBundle);
   }
 
   /**
@@ -241,6 +250,38 @@ export class BluetoothClient {
       this.handleNotification
     );
     await withAbort(this.notifyCharacteristic.startNotifications(), signal);
+
+    // Wait briefly for potential encryption handshake initiation
+    // Encrypted devices send a challenge immediately after notification subscription
+    await this.detectAndHandleEncryption(signal);
+  }
+
+  /**
+   * Detects encryption initiation and waits for handshake to finish.
+   */
+  private async detectAndHandleEncryption(signal: AbortSignal): Promise<void> {
+    if (!this.keyBundle) return;
+
+    // Wait for an initial handshake message
+    let data: Uint8Array;
+    const encryptionTimeout = AbortSignal.timeout(INITIAL_ENCRYPTION_TIMEOUT_MS);
+    const responsePromise = new Promise<Uint8Array>((resolve, reject) => {
+      this.responsePromise = { resolve, reject };
+    });
+    try {
+      data = await withAbort(responsePromise, AbortSignal.any([signal, encryptionTimeout]));
+    } catch {
+      return;
+    } finally {
+      this.responsePromise = null;
+    }
+
+    // Set up the handshake protocol and wait for it to finish
+    const handshakeProtocol = new HandshakeProtocol(this.keyBundle);
+    const res = await handshakeProtocol.handle(data);
+    await this.write(res!);
+    this.handshakeProtocol = handshakeProtocol;
+    await withAbort(handshakeProtocol.sessionKeyPromise(), signal);
   }
 
   /**
@@ -269,15 +310,22 @@ export class BluetoothClient {
     });
 
     try {
+      // Encrypt command if connection is encrypted
+      let commandData = command.command;
+      if (this.handshakeProtocol?.sessionAesKey) {
+        commandData = await aesEncrypt(commandData, this.handshakeProtocol.sessionAesKey);
+      }
+
       // Send command
-      await withAbort(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.writeCharacteristic!.writeValueWithResponse(command.command as any),
-        signal
-      );
+      await withAbort(this.write(commandData), signal);
 
       // Wait for response
-      const response = await withAbort(responsePromise, signal);
+      let response = await withAbort(responsePromise, signal);
+
+      // Decrypt response if connection is encrypted
+      if (this.handshakeProtocol?.sessionAesKey) {
+        response = await aesDecrypt(response, this.handshakeProtocol.sessionAesKey);
+      }
 
       // Validate response
       if (!command.isValidResponse(response)) {
@@ -295,20 +343,33 @@ export class BluetoothClient {
   }
 
   /**
+   * Directly writes the given data to the GATT characteristic
+   */
+  private write(data: Uint8Array): Promise<void> {
+    return this.writeCharacteristic!.writeValueWithResponse(data as Uint8Array<ArrayBuffer>);
+  }
+
+  /**
    * Handles incoming notification data.
    */
-  private handleNotification = (event: Event): void => {
+  private handleNotification = async (event: Event): Promise<void> => {
     const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
     const value = characteristic.value;
 
-    if (!value || !this.responsePromise) return;
+    if (!value) return;
 
     // Convert DataView to Uint8Array
     const response = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 
-    // Resolve the response promise
-    this.responsePromise.resolve(response);
-    this.responsePromise = null;
+    if (this.handshakeProtocol && !this.handshakeProtocol.isComplete) {
+      // Advance the handshake
+      const res = await this.handshakeProtocol.handle(response);
+      if (res) await this.write(res);
+    } else if (this.responsePromise) {
+      // Resolve the response promise
+      this.responsePromise.resolve(response);
+      this.responsePromise = null;
+    }
   };
 
   /**
@@ -329,5 +390,8 @@ export class BluetoothClient {
 
     // Wipe response promise. It will get rejected automatically.
     this.responsePromise = null;
+
+    // Wipe encryption state (session key is no longer valid)
+    this.handshakeProtocol = null;
   };
 }

@@ -26,3 +26,6 @@ export {
   MAX_PACKET_SIZE,
   MAX_REGISTERS_PER_REQUEST,
 } from "./bluetooth/constants.ts";
+
+// Encryption
+export { createKeyBundle } from "./encryption/key-bundle.ts";

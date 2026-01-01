@@ -1,11 +1,21 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 
+import {
+  BLUETTI_SERVICE_UUID,
+  BLUETTI_WRITE_UUID,
+  BLUETTI_NOTIFY_UUID,
+  MockBluetoothDevice,
+  createMockBluetooth,
+  createRange,
+} from "../../src/testing/mock-bluetooth-device.ts";
+
 // Mock the constants module to use a shorter timeout for tests
 mock.module("../../src/bluetooth/constants.ts", () => ({
-  BLUETTI_SERVICE_UUID: 0xff00,
-  BLUETTI_WRITE_UUID: "0000ff02-0000-1000-8000-00805f9b34fb",
-  BLUETTI_NOTIFY_UUID: "0000ff01-0000-1000-8000-00805f9b34fb",
-  RESPONSE_TIMEOUT_MS: 50, // 50ms instead of 5000ms for faster tests
+  BLUETTI_SERVICE_UUID,
+  BLUETTI_WRITE_UUID,
+  BLUETTI_NOTIFY_UUID,
+  RESPONSE_TIMEOUT_MS: 50, // 50ms for faster tests
+  INITIAL_ENCRYPTION_TIMEOUT_MS: 50, // 50ms for faster tests
   MAX_PACKET_SIZE: 20,
   MAX_REGISTERS_PER_REQUEST: 7,
 }));
@@ -16,11 +26,6 @@ import {
   ChecksumError,
   TimeoutError,
 } from "../../src/bluetooth/client.ts";
-import {
-  MockBluetoothDevice,
-  createMockBluetooth,
-  createRange,
-} from "../../src/testing/mock-bluetooth-device.ts";
 
 async function connectedClient() {
   const client = await BluetoothClient.request();
@@ -237,7 +242,7 @@ describe("BluetoothClient", () => {
   });
 
   describe("integration tests", () => {
-    test("automatically reconnects", async() => {
+    test("automatically reconnects", async () => {
       const client = await connectedClient();
 
       // It doesn't consider itself disconnected until a failed command, which
@@ -248,7 +253,9 @@ describe("BluetoothClient", () => {
 
       // Try a command again, this time with a failed connection
       mockDevice.injectTimeout();
-      await expect(client.writeRegisters(50, new Uint8Array([0xab, 0xcd]))).rejects.toBeInstanceOf(TimeoutError);
+      await expect(client.writeRegisters(50, new Uint8Array([0xab, 0xcd]))).rejects.toBeInstanceOf(
+        TimeoutError
+      );
 
       // Finally try it and this time let it succeed
       await client.writeRegisters(50, new Uint8Array([0xab, 0xcd]));

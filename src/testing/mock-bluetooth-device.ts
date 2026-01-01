@@ -1,6 +1,9 @@
 import { RegisterMemory } from "./register-memory.ts";
 import { MODBUSHandler, createRange, type AddressRange } from "./modbus-handler.ts";
 import { FailureInjector, ConnectionErrorType, BleError, EofError } from "./failure-injector.ts";
+import { HandshakeProtocol, HandshakeMessage, HandshakeState } from "../encryption/handshake.ts";
+import { aesEncrypt, aesDecrypt } from "../encryption/aes.ts";
+import type { KeyBundle } from "../encryption/key-bundle.ts";
 
 // Re-export for convenience
 export { ConnectionErrorType, BleError, EofError };
@@ -9,6 +12,13 @@ export { ConnectionErrorType, BleError, EofError };
 export const BLUETTI_SERVICE_UUID = 0xff00;
 export const BLUETTI_WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb";
 export const BLUETTI_NOTIFY_UUID = "0000ff01-0000-1000-8000-00805f9b34fb";
+
+export async function generateKey(): Promise<CryptoKeyPair> {
+  return await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+    "sign",
+    "verify",
+  ]);
+}
 
 /**
  * Configuration for creating a mock Bluetti device.
@@ -25,6 +35,12 @@ export interface MockBluetoothDeviceConfig {
 
   /** Ranges of addresses that can be written */
   writableRanges: AddressRange[];
+
+  /** Whether this device uses encryption */
+  encrypted?: boolean;
+
+  /** Key bundle for encryption (required if encrypted is true) */
+  keyBundle?: KeyBundle;
 }
 
 /**
@@ -71,19 +87,8 @@ export class MockCharacteristic extends EventTarget {
     // Check for timeout (no response)
     if (this.device.failureInjector.shouldTimeout()) return;
 
-    // Build response
-    let response = this.device.failureInjector.getResponseOverride();
-    if (!response) {
-      // Process the command normally
-      response = this.device.modbusHandler.handleCommand(value);
-    }
-    if (this.device.failureInjector.shouldCorruptCrc()) {
-      response = new Uint8Array(response);
-      response[response.length - 1]! ^= 0xff;
-    }
-
-    // Send response via notification
-    this.device.sendNotification(response);
+    // Handle the write
+    await this.device.handleWrite(value);
   }
 
   async startNotifications(): Promise<void> {
@@ -193,6 +198,11 @@ export class MockBluetoothDevice extends EventTarget {
   private _gatt: MockGATTServer | null = null;
   private notifyCharacteristic: MockCharacteristic | null = null;
 
+  // Encryption support
+  private _clientKeyBundle: KeyBundle | null = null;
+  private _serverKeyBundle: KeyBundle | null = null;
+  private _handshakeProtocol: HandshakeProtocol | null = null;
+
   /**
    * Creates a new mock Bluetti device.
    */
@@ -215,6 +225,23 @@ export class MockBluetoothDevice extends EventTarget {
     );
 
     this.failureInjector = new FailureInjector();
+
+    // Encryption setup
+    if (config.encrypted) {
+      Promise.all([generateKey(), generateKey()]).then(([clientKey, serverKey]) => {
+        const sharedSecret = crypto.getRandomValues(new Uint8Array(16));
+        this._clientKeyBundle = {
+          signingKey: clientKey.privateKey,
+          verifyKey: serverKey.publicKey,
+          sharedSecret,
+        };
+        this._serverKeyBundle = {
+          signingKey: serverKey.privateKey,
+          verifyKey: clientKey.publicKey,
+          sharedSecret,
+        };
+      });
+    }
   }
 
   /**
@@ -222,6 +249,13 @@ export class MockBluetoothDevice extends EventTarget {
    */
   get registerMemory(): RegisterMemory {
     return this.memory;
+  }
+
+  /**
+   * Returns the key bundle to use for the client if encryption is on.
+   */
+  get clientKeyBundle(): KeyBundle | null {
+    return this._clientKeyBundle;
   }
 
   /**
@@ -261,24 +295,100 @@ export class MockBluetoothDevice extends EventTarget {
   }
 
   /**
+   * Whether the encryption handshake is complete.
+   */
+  get handshakeComplete(): boolean {
+    return this._handshakeProtocol?.isComplete ?? false;
+  }
+
+  /**
    * Sets the notify characteristic reference.
    * @internal Called by MockService when the notify characteristic is created.
    */
   setNotifyCharacteristic(char: MockCharacteristic): void {
     this.notifyCharacteristic = char;
+
+    // If encrypted, initiate handshake by sending challenge after a delay
+    if (this._serverKeyBundle) {
+      this._handshakeProtocol = new HandshakeProtocol(this._serverKeyBundle);
+      this._handshakeProtocol.handle(null).then((challenge) => {
+        this.sendDelayedNotification(challenge!);
+      });
+    }
+  }
+
+  /**
+   * Handles an incoming command, with encryption support.
+   * @internal Called by MockCharacteristic when data is written.
+   */
+  async handleWrite(value: Uint8Array): Promise<void> {
+    // If it's encrypted...
+    if (this._handshakeProtocol) {
+      if (!this._handshakeProtocol.sessionAesKey) {
+        // If we're still in the handshake protocol, let it handle things
+        await this._handleHandshakeMessage(value);
+        return;
+      } else {
+        value = await aesDecrypt(value, this._handshakeProtocol.sessionAesKey);
+      }
+    }
+
+    // Process command
+    let response = this.failureInjector.getResponseOverride();
+    if (!response) {
+      response = this.modbusHandler.handleCommand(value);
+    }
+
+    // Apply CRC corruption if injected
+    if (this.failureInjector.shouldCorruptCrc()) {
+      response[response.length - 1]! ^= 0xff;
+    }
+
+    // Ecnrypt it if we have the session key
+    if (this._handshakeProtocol?.sessionAesKey) {
+      response = await aesEncrypt(response, this._handshakeProtocol.sessionAesKey);
+    }
+
+    // Send response via notification
+    this.sendNotification(response);
+  }
+
+  private async _handleHandshakeMessage(value: Uint8Array): Promise<void> {
+    // Generate response - all writes will result in a response message
+    const response = (await this._handshakeProtocol!.handle(value))!;
+    this.sendDelayedNotification(response);
+
+    // After the challenge round is done we need to initiate the key exchange
+    // round
+    const challengeAccepted = new HandshakeMessage(
+      HandshakeState.CHALLENGE_ACCEPTED,
+      new Uint8Array([0])
+    );
+    if (challengeAccepted.toBytes().every((v, i) => response[i] == v)) {
+      const keyRound = await this._handshakeProtocol!.handle(null);
+      this.sendDelayedNotification(keyRound!);
+    }
+  }
+
+  /**
+   * Sends the notification with a setTimeout(x, 0) delay, to simulate a real
+   * device response delay
+   */
+  private sendDelayedNotification(data: Uint8Array): void {
+    setTimeout(this.sendNotification, 0, data);
   }
 
   /**
    * Sends a notification to the registered listener.
    * Sets the value on the notify characteristic and dispatches the event.
    */
-  sendNotification(data: Uint8Array): void {
+  private sendNotification = (data: Uint8Array): void => {
     if (!this.notifyCharacteristic) return;
 
     const dataView = new DataView(data.buffer, data.byteOffset, data.byteLength);
     this.notifyCharacteristic.value = dataView;
     this.notifyCharacteristic.dispatchEvent(new Event("characteristicvaluechanged"));
-  }
+  };
 }
 
 /**
