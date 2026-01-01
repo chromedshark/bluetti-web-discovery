@@ -142,6 +142,13 @@ export class BluetoothClient {
   }
 
   /**
+   * Whether the connection is using encryption.
+   */
+  get isEncrypted(): boolean {
+    return !!this.handshakeProtocol?.sessionAesKey;
+  }
+
+  /**
    * Connects to the device's GATT server and acquires characteristics.
    *
    * Can be called multiple times to reconnect after disconnection.
@@ -329,7 +336,7 @@ export class BluetoothClient {
 
       // Validate response
       if (!command.isValidResponse(response)) {
-        throw new ChecksumError("Invalid response checksum");
+        throw new ChecksumError(`Invalid response checksum: ${response.toHex()}`);
       } else if (command.isExceptionResponse(response)) {
         const exceptionCode = command.getExceptionCode(response);
         throw new ModbusError(`MODBUS exception: ${exceptionCode}`, exceptionCode);

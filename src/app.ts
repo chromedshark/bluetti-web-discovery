@@ -1,7 +1,7 @@
 /**
  * Manual test page application logic.
  */
-import { BluetoothClient, createKeyBundle, parseRegisterData, registerToUint16 } from "./main.ts";
+import { BluetoothClient, createKeyBundle, parseRegisterData, splitRanges } from "./main.ts";
 
 declare module "bun" {
   interface Env {
@@ -11,15 +11,21 @@ declare module "bun" {
   }
 }
 
-let client: BluetoothClient | null = null;
+interface ReadallData {
+  name: string;
+  iotVersion: number;
+  protocolVersion: number;
+  encryption: boolean;
+  registers: Map<number, string>;
+}
 
-const status = document.getElementById("status")!;
+let client: BluetoothClient | null = null;
+let scanData: ReadallData | null = null;
+let stopScan = false;
+
 const output = document.getElementById("output")!;
-const connectBtn = document.getElementById("connectBtn") as HTMLButtonElement;
-const disconnectBtn = document.getElementById("disconnectBtn") as HTMLButtonElement;
-const readBtn = document.getElementById("readBtn") as HTMLButtonElement;
-const startAddrInput = document.getElementById("startAddr") as HTMLInputElement;
-const countInput = document.getElementById("count") as HTMLInputElement;
+const scanBtn = document.getElementById("scanBtn") as HTMLButtonElement;
+const downloadBtn = document.getElementById("downloadBtn") as HTMLButtonElement;
 
 const keyBundle = await createKeyBundle(
   process.env.KEY_BUNDLE_SIGNING_KEY,
@@ -33,23 +39,12 @@ function log(message: string): void {
   output.scrollTop = output.scrollHeight;
 }
 
-function updateStatus(): void {
-  if (client?.isConnected) {
-    status.textContent = `Connected: ${client.deviceName || "Unknown"}`;
-    status.className = "connected";
-    connectBtn.disabled = true;
-    disconnectBtn.disabled = false;
-    readBtn.disabled = false;
-  } else {
-    status.textContent = "Disconnected";
-    status.className = "disconnected";
-    connectBtn.disabled = false;
-    disconnectBtn.disabled = true;
-    readBtn.disabled = true;
+scanBtn.addEventListener("click", async () => {
+  if (client) {
+    stopScan = true;
+    return;
   }
-}
 
-connectBtn.addEventListener("click", async () => {
   try {
     log("Requesting device...");
     client = await BluetoothClient.request(keyBundle);
@@ -57,58 +52,92 @@ connectBtn.addEventListener("click", async () => {
 
     log("Connecting...");
     await client.connect();
-    log(`Connected to: ${client.deviceName}`);
-    updateStatus();
+    log(
+      `Connected to: ${client.deviceName} (${client.isEncrypted ? "encrypted" : "not encrypted"})`
+    );
 
     // Load protocol version. Encrypted devices appear to expect polling after
     // handshake completion, or they re-notify that the handshake is done.
     const registers = await client.readRegisters(16, 1);
-    log(`Protocol version: ${registerToUint16(registers)}`);
-  } catch (error) {
-    log(`Error: ${(error as Error).message}`);
-  }
-});
+    const protocolVersion = new DataView(registers.buffer).getUint16(0, false);
+    log(`Protocol version: ${protocolVersion}`);
 
-disconnectBtn.addEventListener("click", () => {
-  client?.disconnect();
-  log("Disconnected");
-  updateStatus();
-});
+    // Set up to stop scan
+    stopScan = false;
+    scanBtn.textContent = "Stop Scan";
 
-readBtn.addEventListener("click", async () => {
-  if (!client) {
-    log("No device selected");
-    return;
-  }
+    // Figure out what ranges we want to query. Stop before we get to the wifi
+    // information. Use 5 address chunks so we're better aligned with the
+    // decimal alignment that Bluetti seems to prefer for assigning addresses.
+    // 5000 contains wifi usernames and passwords on v1 devices with wifi
+    // 12000 contains wifi usernames and passwords on v2 devices with wifi
+    const addressMax = protocolVersion < 2000 ? 4000 : 7000;
+    const allRanges = splitRanges([{ start: 0, count: addressMax }], 5);
 
-  const startAddr = parseInt(startAddrInput.value, 10);
-  const count = parseInt(countInput.value, 10);
+    // Build ReadallData
+    const data: ReadallData = {
+      name: client.deviceName || "",
+      iotVersion: protocolVersion < 2000 ? 1 : 2,
+      protocolVersion,
+      encryption: client.isEncrypted,
+      registers: new Map<number, string>(),
+    };
+    for (const range of allRanges) {
+      if (stopScan) break;
 
-  if (isNaN(startAddr) || isNaN(count) || count < 1 || count > 7) {
-    log("Invalid input: start address must be a number, count must be 1-7");
-    return;
-  }
-
-  try {
-    log(`Reading ${count} registers from address ${startAddr}...`);
-
-    const data = await client.readRegisters(startAddr, count);
-
-    const registers = parseRegisterData(startAddr, data);
-    for (const reg of registers) {
-      const uint16 = registerToUint16(reg.value);
-      const hex = Array.from(reg.value)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join(" ");
-      log(`  [${reg.address}] = ${uint16} (0x${hex})`);
+      try {
+        log(`Reading ${range.count} registers from address ${range.start}...`);
+        const chunk = await client.readRegisters(range.start, range.count, { timeout: 1500 });
+        const registers = parseRegisterData(range.start, chunk);
+        for (const reg of registers) {
+          log(`  [${reg.address}] = 0x${reg.value.toHex()}`);
+          data.registers.set(reg.address, reg.value.toHex());
+        }
+      } catch (error) {
+        log(`Error: ${(error as Error).message}`);
+      } finally {
+        // Wait a bit between requests
+        await new Promise((resolve, _) => setTimeout(resolve, 100));
+      }
     }
-
-    log("Read complete");
+    scanData = data;
+    downloadBtn.disabled = false;
+    log(`Scan complete! You can now download the results above.`);
   } catch (error) {
     log(`Error: ${(error as Error).message}`);
+  } finally {
+    scanBtn.textContent = "Pick a Device and Scan";
+    if (client) client.disconnect();
+    client = null;
   }
+});
+
+downloadBtn.addEventListener("click", () => {
+  if (!scanData) {
+    alert("No scan data to download");
+    return;
+  }
+
+  // Build JSON
+  const { registers, ...rest } = scanData;
+  const json = Object.assign({ registers: {} as Record<string, string> }, rest);
+  for (const [key, value] of registers) {
+    json.registers[key.toString()] = value;
+  }
+
+  // Prompt to download it
+  const blob = new Blob([JSON.stringify(json)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url
+  link.download = "bluetti_data.json";
+  document.body.appendChild(link);
+  link.click();
+
+  // Clean up
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 });
 
 // Initial status update
-updateStatus();
-log("Ready. Click 'Connect to Device' to start.");
+log("Ready. Click 'Pick a Device and Scan' to start.");

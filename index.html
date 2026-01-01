@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bluetti Web Discovery - Manual Test</title>
+    <title>Bluetti Web Discovery</title>
     <style>
       body {
         font-family: monospace;
@@ -14,54 +14,27 @@
       .controls {
         margin: 20px 0;
       }
-      input {
-        width: 100px;
-        font-family: monospace;
-      }
       button {
         margin: 5px;
         padding: 8px 16px;
-      }
-      #status {
-        padding: 10px;
-        margin: 10px 0;
-        border: 1px solid #ccc;
       }
       #output {
         background: #f0f0f0;
         padding: 10px;
         min-height: 200px;
+        max-height: 500px;
         white-space: pre-wrap;
         font-size: 12px;
-      }
-      .connected {
-        background: #d4edda !important;
-      }
-      .disconnected {
-        background: #f8d7da !important;
+        overflow-y: scroll;
       }
     </style>
   </head>
   <body>
-    <h1>Bluetti Web Discovery - Manual Test</h1>
-
-    <div id="status" class="disconnected">Disconnected</div>
+    <h1>Bluetti Web Discovery</h1>
 
     <div class="controls">
-      <button id="connectBtn">Connect to Device</button>
-      <button id="disconnectBtn" disabled>Disconnect</button>
-    </div>
-
-    <div class="controls">
-      <label>
-        Start Address:
-        <input type="number" id="startAddr" value="10" min="0" />
-      </label>
-      <label>
-        Count:
-        <input type="number" id="count" value="7" min="1" max="7" />
-      </label>
-      <button id="readBtn" disabled>Read Registers</button>
+      <button id="scanBtn">Pick a Device and Scan</button>
+      <button id="downloadBtn" disabled>Download Results</button>
     </div>
 
     <h2>Output</h2>
