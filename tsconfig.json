@@ -11,11 +11,12 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    "jsx": "preserve",
 
     // Basic compiler settings
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
 
     // Type checking configs
     "skipLibCheck": true,

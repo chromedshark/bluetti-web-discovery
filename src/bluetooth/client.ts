@@ -127,7 +127,7 @@ export class BluetoothClient {
     });
 
     // If device is a mock device, use the key bundle from there
-    const mockDevice = (device as unknown) as MockBluetoothDevice;
+    const mockDevice = device as unknown as MockBluetoothDevice;
     if (mockDevice.clientKeyBundle) keyBundle = mockDevice.clientKeyBundle;
 
     return new BluetoothClient(device, keyBundle);
