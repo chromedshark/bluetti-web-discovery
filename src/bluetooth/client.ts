@@ -14,6 +14,7 @@ import {
 import { HandshakeProtocol } from "../encryption/handshake.ts";
 import { aesEncrypt, aesDecrypt } from "../encryption/aes.ts";
 import type { KeyBundle } from "../encryption/key-bundle.ts";
+import type { MockBluetoothDevice } from "../testing/mock-bluetooth-device.ts";
 
 /**
  * Error thrown when a MODBUS exception response is received.
@@ -124,6 +125,11 @@ export class BluetoothClient {
     const device = await navigator.bluetooth.requestDevice({
       filters: [{ services: [BLUETTI_SERVICE_UUID] }],
     });
+
+    // If device is a mock device, use the key bundle from there
+    const mockDevice = (device as unknown) as MockBluetoothDevice;
+    if (mockDevice.clientKeyBundle) keyBundle = mockDevice.clientKeyBundle;
+
     return new BluetoothClient(device, keyBundle);
   }
 

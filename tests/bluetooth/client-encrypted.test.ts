@@ -21,10 +21,9 @@ mock.module("../../src/bluetooth/constants.ts", () => ({
 }));
 
 import { BluetoothClient, TimeoutError } from "../../src/bluetooth/client.ts";
-import type { KeyBundle } from "../../src/encryption/key-bundle.ts";
 
-async function connectedClient(keyBundle: KeyBundle) {
-  const client = await BluetoothClient.request(keyBundle);
+async function connectedClient() {
+  const client = await BluetoothClient.request();
   await client.connect();
   return client;
 }
@@ -71,7 +70,7 @@ describe("BluetoothClient encryption", () => {
 
   describe("request()", () => {
     test("returns client instance with device but not connected", async () => {
-      const client = await BluetoothClient.request(mockDevice.clientKeyBundle!);
+      const client = await BluetoothClient.request();
 
       expect(client.deviceName).toBe("AC300Test");
       expect(client.isConnected).toBe(false);
@@ -80,7 +79,7 @@ describe("BluetoothClient encryption", () => {
 
   describe("connect()", () => {
     test("connects to GATT server", async () => {
-      const client = await BluetoothClient.request(mockDevice.clientKeyBundle!);
+      const client = await BluetoothClient.request();
       expect(client.isConnected).toBe(false);
 
       await client.connect();
@@ -89,7 +88,7 @@ describe("BluetoothClient encryption", () => {
     });
 
     test("can reconnect after disconnect", async () => {
-      const client = await BluetoothClient.request(mockDevice.clientKeyBundle!);
+      const client = await BluetoothClient.request();
       await client.connect();
       expect(client.isConnected).toBe(true);
 
@@ -103,7 +102,7 @@ describe("BluetoothClient encryption", () => {
 
   describe("disconnect()", () => {
     test("disconnects from device", async () => {
-      const client = await connectedClient(mockDevice.clientKeyBundle!);
+      const client = await connectedClient();
       expect(client.isConnected).toBe(true);
 
       client.disconnect();
@@ -116,7 +115,7 @@ describe("BluetoothClient encryption", () => {
 
   describe("integration tests", () => {
     test("automatically reconnects", async () => {
-      const client = await connectedClient(mockDevice.clientKeyBundle!);
+      const client = await connectedClient();
 
       // It doesn't consider itself disconnected until a failed command, which
       // just times out

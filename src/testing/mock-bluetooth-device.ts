@@ -38,9 +38,6 @@ export interface MockBluetoothDeviceConfig {
 
   /** Whether this device uses encryption */
   encrypted?: boolean;
-
-  /** Key bundle for encryption (required if encrypted is true) */
-  keyBundle?: KeyBundle;
 }
 
 /**
