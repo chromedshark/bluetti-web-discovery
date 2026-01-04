@@ -11,11 +11,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "bun test",
+    "test:features": "bunx bddgen && bunx playwright test",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
-    "serve": "bun ./src/index.html"
+    "serve": "bun ./src/index.html",
+    "serve:test": "bun ./test-server.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.57.0",
     "@types/bun": "latest",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -23,6 +26,7 @@
     "@types/web-bluetooth": "^0.0.21",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
+    "playwright-bdd": "^8.4.2",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.51.0"

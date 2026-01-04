@@ -14,6 +14,20 @@ interface ConnectionError {
   details?: string;
 }
 
+function decodeStringField(bytes: Uint8Array): string {
+  const lastNonNull = bytes.findLastIndex((byte) => byte !== 0);
+  bytes = bytes.subarray(0, lastNonNull + 1);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function decodeSwapStringField(bytes: Uint8Array): string {
+  const registerLength = bytes.length << 1;
+  for (let i = 0; i < registerLength; i++) {
+    [bytes[2 * i], bytes[2 * i + 1]] = [bytes[2 * i + 1]!, bytes[2 * i]!];
+  }
+  return decodeStringField(bytes);
+}
+
 export function ConnectPage(props: ConnectPageProps) {
   const appDispatch = props.dispatch;
   const [connecting, setConnecting] = useState(false);
@@ -43,13 +57,9 @@ export function ConnectPage(props: ConnectPageProps) {
         await new Promise((r, _) => setTimeout(r, 200));
         const nameStart = protocolVersion < 2000 ? 10 : 110;
         const registers = await client.readRegisters(nameStart, 6);
-        if (protocolVersion >= 2000) {
-          // V2 devices use a swap string field
-          for (let i = 0; i < 6; i++) {
-            [registers[2 * i], registers[2 * i + 1]] = [registers[2 * i + 1]!, registers[2 * i]!];
-          }
-        }
-        deviceType = new TextDecoder("utf-8").decode(registers);
+        deviceType = (protocolVersion < 2000 ? decodeStringField : decodeSwapStringField)(
+          registers
+        );
         log.push(`Device type: ${deviceType}`);
       } catch (e) {
         log.push(`Failed to read device name: ${e}`);
@@ -64,9 +74,13 @@ export function ConnectPage(props: ConnectPageProps) {
         },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.push(`Error: ${message}`);
-      setError({ message, details: log.join("\n") });
+      if (error instanceof DOMException && error.name === "NotFoundError") {
+        // This is a cancellation, so don't display an error message
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        log.push(`Error: ${message}`);
+        setError({ message, details: log.join("\n") });
+      }
     }
 
     setConnecting(false);
