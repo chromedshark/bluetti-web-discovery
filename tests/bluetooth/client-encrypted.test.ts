@@ -14,7 +14,7 @@ mock.module("../../src/bluetooth/constants.ts", () => ({
   BLUETTI_SERVICE_UUID,
   BLUETTI_WRITE_UUID,
   BLUETTI_NOTIFY_UUID,
-  RESPONSE_TIMEOUT_MS: 50, // 50ms for faster tests
+  RESPONSE_TIMEOUT_MS: 500, // 500ms for faster tests
   INITIAL_ENCRYPTION_TIMEOUT_MS: 50, // 50ms for faster tests
   MAX_PACKET_SIZE: 20,
   MAX_REGISTERS_PER_REQUEST: 7,

@@ -363,16 +363,16 @@ export class MockBluetoothDevice extends EventTarget {
     );
     if (challengeAccepted.toBytes().every((v, i) => response[i] == v)) {
       const keyRound = await this._handshakeProtocol!.handle(null);
-      this.sendDelayedNotification(keyRound!);
+      this.sendDelayedNotification(keyRound!, 100);
     }
   }
 
   /**
-   * Sends the notification with a setTimeout(x, 0) delay, to simulate a real
+   * Sends the notification with a setTimeout(x, time) delay, to simulate a real
    * device response delay
    */
-  private sendDelayedNotification(data: Uint8Array): void {
-    setTimeout(this.sendNotification, 0, data);
+  private sendDelayedNotification(data: Uint8Array, time: number = 20): void {
+    setTimeout(this.sendNotification, time, data);
   }
 
   /**
