@@ -1,4 +1,4 @@
-import type { DeviceInfo } from "../App";
+import type { DeviceInfo } from "../context/DeviceContext";
 
 interface DeviceInfoCardProps {
   device: DeviceInfo;

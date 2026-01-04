@@ -1,20 +1,22 @@
-import type { Dispatch } from "react";
-import type { AppAction, DeviceInfo } from "../App";
+import { useLocation } from "wouter";
+import { useDevice } from "../context/DeviceContext";
 import { DeviceInfoCard } from "../components/DeviceInfoCard";
 import { ActionButtons } from "../components/ActionButtons";
 
-interface DashboardPageProps {
-  device: DeviceInfo;
-  dispatch: Dispatch<AppAction>;
-}
+export function DashboardPage() {
+  const { device, disconnect } = useDevice();
+  const [, navigate] = useLocation();
 
-export function DashboardPage({ device, dispatch }: DashboardPageProps) {
+  // Device is guaranteed non-null by RequireDevice guard in App.tsx
+  if (!device) return null;
+
   const handleStartDiscovery = () => {
-    dispatch({ type: "navigate", to: "discovery" });
+    navigate("/discovery");
   };
 
   const handleDisconnect = () => {
-    dispatch({ type: "disconnect" });
+    disconnect();
+    navigate("/");
   };
 
   return (

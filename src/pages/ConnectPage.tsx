@@ -1,13 +1,10 @@
-import { useState, type Dispatch } from "react";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { BluetoothClient } from "../bluetooth/client";
-import type { AppAction } from "../App";
+import { useDevice } from "../context/DeviceContext";
 import { BrowserWarning } from "../components/BrowserWarning";
 import { ErrorDisplay } from "../components/ErrorDisplay";
 import { LoadingSpinner } from "../components/LoadingSpinner";
-
-interface ConnectPageProps {
-  dispatch: Dispatch<AppAction>;
-}
 
 interface ConnectionError {
   message: string;
@@ -28,8 +25,9 @@ function decodeSwapStringField(bytes: Uint8Array): string {
   return decodeStringField(bytes);
 }
 
-export function ConnectPage(props: ConnectPageProps) {
-  const appDispatch = props.dispatch;
+export function ConnectPage() {
+  const { setDevice } = useDevice();
+  const [, navigate] = useLocation();
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<ConnectionError | null>(null);
 
@@ -65,14 +63,8 @@ export function ConnectPage(props: ConnectPageProps) {
         log.push(`Failed to read device name: ${e}`);
       }
 
-      appDispatch({
-        type: "connectionSuccess",
-        device: {
-          client,
-          protocolVersion,
-          deviceType,
-        },
-      });
+      setDevice({ client, protocolVersion, deviceType });
+      navigate("/dashboard");
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotFoundError") {
         // This is a cancellation, so don't display an error message

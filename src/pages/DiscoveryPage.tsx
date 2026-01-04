@@ -1,13 +1,10 @@
-import type { Dispatch } from "react";
-import type { AppAction } from "../App";
+import { useLocation } from "wouter";
 
-interface DiscoveryPageProps {
-  dispatch: Dispatch<AppAction>;
-}
+export function DiscoveryPage() {
+  const [, navigate] = useLocation();
 
-export function DiscoveryPage({ dispatch }: DiscoveryPageProps) {
   const handleBack = () => {
-    dispatch({ type: "navigate", to: "dashboard" });
+    navigate("/dashboard");
   };
 
   return (

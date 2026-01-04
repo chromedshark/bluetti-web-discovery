@@ -1,7 +1,8 @@
-import type { Draft } from "immer";
-import { useImmerReducer } from "use-immer";
+import { type ReactNode } from "react";
+import { Router, Route, Switch, Redirect } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { createKeyBundle } from "./encryption/key-bundle";
-import type { BluetoothClient } from "./bluetooth/client";
+import { DeviceProvider, useDevice } from "./context/DeviceContext";
 import { ConnectPage } from "./pages/ConnectPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DiscoveryPage } from "./pages/DiscoveryPage";
@@ -20,71 +21,43 @@ window.bluettiKeyBundle = await createKeyBundle(
   process.env.KEY_BUNDLE_SHARED_SECRET
 );
 
-export interface DeviceInfo {
-  client: BluetoothClient;
-  protocolVersion: number;
-  deviceType: string | null;
-}
+// Route guard: redirects to connect if no device
+function RequireDevice({ children }: { children: ReactNode }) {
+  const { device } = useDevice();
+  const [, navigate] = useHashLocation();
 
-export type AppAction =
-  | { type: "navigate"; to: "dashboard" | "discovery" }
-  | { type: "connectionSuccess"; device: DeviceInfo }
-  | { type: "disconnect" };
-
-export type ViewState = { type: "connect" } | { type: "dashboard" } | { type: "discovery" };
-
-interface AppState {
-  view: ViewState;
-  device: DeviceInfo | null;
-}
-
-const initialState: AppState = {
-  view: { type: "connect" },
-  device: null,
-};
-
-function reducer(draft: Draft<AppState>, action: AppAction) {
-  switch (action.type) {
-    case "navigate":
-      draft.view = { type: action.to };
-      break;
-
-    case "connectionSuccess":
-      draft.device = action.device;
-      draft.view = { type: "dashboard" };
-      break;
-
-    case "disconnect":
-      if (draft.device) {
-        draft.device.client.disconnect();
-        draft.device = null;
-      }
-      draft.view = { type: "connect" };
-      break;
-
-    default: {
-      const _action: never = action;
-      throw new Error(`Unhandled action: ${JSON.stringify(_action)}`);
-    }
+  if (!device) {
+    navigate("/");
+    return null;
   }
+  return <>{children}</>;
 }
 
 export default function App() {
-  const [state, dispatch] = useImmerReducer(reducer, initialState);
+  return (
+    <DeviceProvider>
+      <Router hook={useHashLocation}>
+        <Switch>
+          <Route path="/" component={ConnectPage} />
 
-  switch (state.view.type) {
-    case "connect":
-      return <ConnectPage dispatch={dispatch} />;
+          <Route path="/dashboard">
+            <RequireDevice>
+              <DashboardPage />
+            </RequireDevice>
+          </Route>
 
-    case "dashboard":
-      return <DashboardPage device={state.device!} dispatch={dispatch} />;
+          <Route path="/discovery">
+            <RequireDevice>
+              <DiscoveryPage />
+            </RequireDevice>
+          </Route>
 
-    case "discovery":
-      return <DiscoveryPage dispatch={dispatch} />;
-
-    default: {
-      const _view: never = state.view;
-      throw new Error(`Unknown view: ${JSON.stringify(_view)}`);
-    }
-  }
+          {/* Fallback */}
+          <Route>
+            <Redirect to="/" />
+          </Route>
+        </Switch>
+      </Router>
+    </DeviceProvider>
+  );
 }
