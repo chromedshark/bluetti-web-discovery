@@ -15,6 +15,7 @@ import { HandshakeProtocol } from "../encryption/handshake.ts";
 import { aesEncrypt, aesDecrypt } from "../encryption/aes.ts";
 import type { KeyBundle } from "../encryption/key-bundle.ts";
 import type { MockBluetoothDevice } from "../testing/mock-bluetooth-device.ts";
+import { withAbort } from "../utils/withAbort.ts";
 
 /**
  * Error thrown when a MODBUS exception response is received.
@@ -56,24 +57,6 @@ export interface ConnectionOptions {
   /** Timeout in milliseconds (default: RESPONSE_TIMEOUT_MS) */
   timeout?: number;
 }
-
-// Helper that races a promise against the abort signal
-const withAbort = <T>(promise: Promise<T>, signal: AbortSignal): Promise<T> => {
-  if (signal.aborted) {
-    return Promise.reject(new TimeoutError("Connection timeout"));
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new TimeoutError("Connection timeout"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise
-      .then(resolve)
-      .catch(reject)
-      .finally(() => {
-        signal.removeEventListener("abort", onAbort);
-      });
-  });
-};
 
 /**
  * Client for communicating with Bluetti devices over Web Bluetooth.
@@ -138,6 +121,13 @@ export class BluetoothClient {
    */
   get isConnected(): boolean {
     return this.writeCharacteristic != null && this.notifyCharacteristic != null;
+  }
+
+  /**
+   * The device id assigned by the browser
+   */
+  get id(): string {
+    return this.device.id;
   }
 
   /**
@@ -240,33 +230,38 @@ export class BluetoothClient {
 
     if (!this.device.gatt) throw new Error("Device has no GATT server");
 
-    // Connect to GATT server
-    await withAbort(this.device.gatt.connect(), signal);
+    try {
+      // Connect to GATT server
+      await withAbort(this.device.gatt.connect(), signal);
 
-    // Get service and characteristics
-    const service = await withAbort(
-      this.device.gatt.getPrimaryService(BLUETTI_SERVICE_UUID),
-      signal
-    );
-    this.writeCharacteristic = await withAbort(
-      service.getCharacteristic(BLUETTI_WRITE_UUID),
-      signal
-    );
-    this.notifyCharacteristic = await withAbort(
-      service.getCharacteristic(BLUETTI_NOTIFY_UUID),
-      signal
-    );
+      // Get service and characteristics
+      const service = await withAbort(
+        this.device.gatt.getPrimaryService(BLUETTI_SERVICE_UUID),
+        signal
+      );
+      this.writeCharacteristic = await withAbort(
+        service.getCharacteristic(BLUETTI_WRITE_UUID),
+        signal
+      );
+      this.notifyCharacteristic = await withAbort(
+        service.getCharacteristic(BLUETTI_NOTIFY_UUID),
+        signal
+      );
 
-    // Start notifications
-    this.notifyCharacteristic.addEventListener(
-      "characteristicvaluechanged",
-      this.handleNotification
-    );
-    await withAbort(this.notifyCharacteristic.startNotifications(), signal);
+      // Start notifications
+      this.notifyCharacteristic.addEventListener(
+        "characteristicvaluechanged",
+        this.handleNotification
+      );
+      await withAbort(this.notifyCharacteristic.startNotifications(), signal);
 
-    // Wait briefly for potential encryption handshake initiation
-    // Encrypted devices send a challenge immediately after notification subscription
-    await this.detectAndHandleEncryption(signal);
+      // Wait briefly for potential encryption handshake initiation
+      // Encrypted devices send a challenge immediately after notification subscription
+      await this.detectAndHandleEncryption(signal);
+    } catch (error) {
+      if (signal.aborted) throw new TimeoutError("Connection timeout");
+      throw error;
+    }
   }
 
   /**
@@ -350,6 +345,9 @@ export class BluetoothClient {
 
       // Parse and return data
       return command.parseResponse(response);
+    } catch (error) {
+      if (signal.aborted) throw new TimeoutError("Response timeout");
+      throw error;
     } finally {
       this.responsePromise = null;
     }
