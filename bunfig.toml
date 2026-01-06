@@ -1,2 +1,8 @@
 [serve.static]
 env = "KEY_BUNDLE_*"
+
+[test]
+preload = ["./tests/setup-indexeddb.ts"]
+coverage = true
+coverageSkipTestFiles = true
+coverageReporter = "lcov"
