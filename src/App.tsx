@@ -1,11 +1,13 @@
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Router, Route, Switch, Redirect } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { createKeyBundle } from "./encryption/key-bundle";
+import { BluetoothClient } from "./bluetooth/client";
 import { DeviceProvider, useDevice } from "./context/DeviceContext";
 import { ConnectPage } from "./pages/ConnectPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DiscoveryPage } from "./pages/DiscoveryPage";
+import { LoadingSpinner } from "./components/LoadingSpinner";
 
 declare module "bun" {
   interface Env {
@@ -33,6 +35,33 @@ function RequireDevice({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// Dev-only test route that bypasses protocol detection
+// URL format: #/test/connect?protocolVersion=1001&deviceType=TEST
+function TestConnectRoute() {
+  const { setDevice } = useDevice();
+  const [, navigate] = useHashLocation();
+
+  useEffect(() => {
+    (async () => {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      const protocolVersion = parseInt(params.get("protocolVersion")!, 10);
+      const deviceType = params.get("deviceType");
+
+      const client = await BluetoothClient.request(window.bluettiKeyBundle);
+      await client.connect();
+
+      setDevice({ client, protocolVersion, deviceType });
+      navigate("/dashboard");
+    })();
+  }, [setDevice, navigate]);
+
+  return (
+    <div className="page">
+      <LoadingSpinner />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <DeviceProvider>
@@ -51,6 +80,10 @@ export default function App() {
               <DiscoveryPage />
             </RequireDevice>
           </Route>
+
+          {process.env.NODE_ENV === "development" && (
+            <Route path={/^\/test\/connect/} component={TestConnectRoute} />
+          )}
 
           {/* Fallback */}
           <Route>

@@ -1,8 +1,6 @@
 import { expect } from "@playwright/test";
-import { createBdd } from "playwright-bdd";
+import { Given, Then } from "./baseTest";
 import { connectionFails } from "./bluetooth";
-
-const { Given, Then } = createBdd();
 
 Given("I am on the connection page", async ({ page }) => {
   await page.goto("/");

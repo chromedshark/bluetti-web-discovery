@@ -34,10 +34,7 @@ export class ProgressEvent extends Event {
  * Divides the given array of scan ranges into ranges that include no more than
  * the given number of registers (so the response fits inside the MTU)
  */
-export function splitRangesToSize(
-  scanRanges: RegisterRange[],
-  maxRegisterCount: number
-): RegisterRange[] {
+function splitRangesToSize(scanRanges: RegisterRange[], maxRegisterCount: number): RegisterRange[] {
   const result: RegisterRange[] = [];
 
   for (const range of scanRanges) {
@@ -72,7 +69,26 @@ export class RegisterScanner extends EventTarget {
     super();
     this.device = device;
     this.totalRegisters = scanRanges.reduce((sum, range) => sum + (range.end - range.start), 0);
-    this.remainingRanges = splitRangesToSize(scanRanges, MAX_REGISTERS_PER_REQUEST);
+    this.remainingRanges = splitRangesToSize(scanRanges, MAX_REGISTERS_PER_REQUEST).toReversed();
+  }
+
+  /**
+   * Returns the recommended scan range based on protocol version.
+   * Protocol < 2000: 0-8000
+   * Protocol >= 2000: 0-20000
+   */
+  static getDefaultRange(protocolVersion: number): RegisterRange {
+    const end = protocolVersion < 2000 ? 8000 : 20000;
+    return { start: 0, end };
+  }
+
+  /**
+   * Queries IndexedDB for the previously scanned registers. This should be
+   * passed to calculatePendingRanges.
+   */
+  static async getScannedRegisters(device: ScannableDevice): Promise<number[]> {
+    const results = await db.scanResults.where("deviceId").equals(device.id).primaryKeys();
+    return results.map(([_, r]) => r);
   }
 
   /**
@@ -81,18 +97,14 @@ export class RegisterScanner extends EventTarget {
    *
    * @param startRegister - Starting register address
    * @param endRegister - Ending register address (exclusive)
-   * @param device - The device to check for existing scan results
+   * @param scannedRegisters - The sorted previously scanned registers
    * @returns Array of contiguous ranges that still need to be scanned
    */
-  static async calculatePendingRanges(
+  static calculatePendingRanges(
     startRegister: number,
     endRegister: number,
-    device: ScannableDevice
-  ): Promise<RegisterRange[]> {
-    // Load previously scanned registers - IndexedDB guarantees they are sorted
-    const results = await db.scanResults.where("deviceId").equals(device.id).primaryKeys();
-    const scannedRegisters = results.map(([_, r]) => r);
-
+    scannedRegisters: number[]
+  ): RegisterRange[] {
     // Find the first scanned register >= startRegister
     let idx = scannedRegisters.findIndex((r) => r >= startRegister);
 

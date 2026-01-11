@@ -48,7 +48,21 @@ describe("RegisterScanner", () => {
     await db.scanResults.clear();
   });
 
-  describe("static calculatePendingRanges", () => {
+  describe("static getDefaultRange", () => {
+    test("returns 0-8000 for protocol version less than 2000", () => {
+      expect(RegisterScanner.getDefaultRange(1001)).toEqual({ start: 0, end: 8000 });
+      expect(RegisterScanner.getDefaultRange(1)).toEqual({ start: 0, end: 8000 });
+      expect(RegisterScanner.getDefaultRange(1999)).toEqual({ start: 0, end: 8000 });
+    });
+
+    test("returns 0-20000 for protocol version 2000 or greater", () => {
+      expect(RegisterScanner.getDefaultRange(2000)).toEqual({ start: 0, end: 20000 });
+      expect(RegisterScanner.getDefaultRange(2001)).toEqual({ start: 0, end: 20000 });
+      expect(RegisterScanner.getDefaultRange(3000)).toEqual({ start: 0, end: 20000 });
+    });
+  });
+
+  describe("static getScannedRegisters", () => {
     const mockDevice: ScannableDevice = {
       id: "test-device",
       readRegisters: async () => new Uint8Array(),
@@ -66,14 +80,26 @@ describe("RegisterScanner", () => {
       );
     };
 
-    test("returns full range when none scanned", async () => {
-      const ranges = await RegisterScanner.calculatePendingRanges(0, 10, mockDevice);
+    test("it returns scanned registers in order", async () => {
+      await seedScannedRegisters([7, 5, 6, 2]);
+      const scanned = await RegisterScanner.getScannedRegisters(mockDevice);
+      expect(scanned).toEqual([2, 5, 6, 7]);
+    });
+
+    test("it returns an empty array if no previous scans", async () => {
+      const scanned = await RegisterScanner.getScannedRegisters(mockDevice);
+      expect(scanned).toEqual([]);
+    });
+  });
+
+  describe("static calculatePendingRanges", () => {
+    test("returns full range when none scanned", () => {
+      const ranges = RegisterScanner.calculatePendingRanges(0, 10, []);
       expect(ranges).toEqual([{ start: 0, end: 10 }]);
     });
 
-    test("excludes already scanned registers and returns contiguous ranges", async () => {
-      await seedScannedRegisters([2, 5, 6, 7]);
-      const ranges = await RegisterScanner.calculatePendingRanges(0, 10, mockDevice);
+    test("excludes already scanned registers and returns contiguous ranges", () => {
+      const ranges = RegisterScanner.calculatePendingRanges(0, 10, [2, 5, 6, 7]);
       expect(ranges).toEqual([
         { start: 0, end: 2 },
         { start: 3, end: 5 },
@@ -81,21 +107,18 @@ describe("RegisterScanner", () => {
       ]);
     });
 
-    test("returns empty array when all scanned", async () => {
-      await seedScannedRegisters([0, 1, 2, 3, 4]);
-      const ranges = await RegisterScanner.calculatePendingRanges(0, 5, mockDevice);
+    test("returns empty array when all scanned", () => {
+      const ranges = RegisterScanner.calculatePendingRanges(0, 5, [0, 1, 2, 3, 4]);
       expect(ranges).toEqual([]);
     });
 
-    test("handles gap at the beginning", async () => {
-      await seedScannedRegisters([0, 1]);
-      const ranges = await RegisterScanner.calculatePendingRanges(0, 5, mockDevice);
+    test("handles gap at the beginning", () => {
+      const ranges = RegisterScanner.calculatePendingRanges(0, 5, [0, 1]);
       expect(ranges).toEqual([{ start: 2, end: 5 }]);
     });
 
-    test("handles gap at the end", async () => {
-      await seedScannedRegisters([3, 4]);
-      const ranges = await RegisterScanner.calculatePendingRanges(0, 5, mockDevice);
+    test("handles gap at the end", () => {
+      const ranges = RegisterScanner.calculatePendingRanges(0, 5, [3, 4]);
       expect(ranges).toEqual([{ start: 0, end: 3 }]);
     });
   });
@@ -241,7 +264,8 @@ describe("RegisterScanner", () => {
       await scanner1.run();
 
       // Get the registers that still need scanning
-      const pendingRanges = await RegisterScanner.calculatePendingRanges(0, 10, device);
+      const scanned = await RegisterScanner.getScannedRegisters(device);
+      const pendingRanges = await RegisterScanner.calculatePendingRanges(0, 10, scanned);
 
       // Resume with pending ranges
       const scanner2 = new RegisterScanner(device, pendingRanges);

@@ -4,6 +4,7 @@ import { defineBddConfig } from "playwright-bdd";
 const testDir = defineBddConfig({
   featuresRoot: "./features",
   quotes: "double",
+  matchKeywords: true,
   // missingSteps: "skip-scenario",
 });
 

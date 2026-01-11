@@ -1,4 +1,5 @@
 import { MockBluetoothDevice } from "./mock-bluetooth-device";
+import { db } from "../database/db";
 import type { MockBluetoothDeviceConfig } from "./mock-bluetooth-device";
 
 export class BluetoothMock {
@@ -25,6 +26,7 @@ export class BluetoothMock {
     if (!this._resolveRequest || !this._rejectRequest) throw new Error("No pending device request");
 
     if (device) {
+      this._currentDevice = device;
       this._resolveRequest(device);
     } else {
       this._rejectRequest(
@@ -37,3 +39,6 @@ export class BluetoothMock {
 const mock = new BluetoothMock();
 Object.defineProperty(navigator, "bluetooth", { value: mock, configurable: true });
 Object.defineProperty(navigator, "mockBluetooth", { value: mock });
+
+// Expose dexie db
+Object.defineProperty(window, "appDb", { value: db });
