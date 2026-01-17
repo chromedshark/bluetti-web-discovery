@@ -49,7 +49,3 @@ Feature: Readable Range Discovery UI
     And I am on the discovery page
     When I set the starting register higher than the ending register
     Then both "Resume" and "Scan" buttons should be disabled
-
-  Scenario: Download option appears after scan completes
-    Given a scan has completed
-    Then I should see an option to download the results as JSON

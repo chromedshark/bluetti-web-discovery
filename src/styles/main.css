@@ -245,3 +245,8 @@ button:disabled {
   color: #666;
   font-size: 14px;
 }
+
+/* Export dialog */
+.export-dialog {
+  max-width: 500px;
+}

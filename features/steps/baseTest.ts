@@ -13,10 +13,17 @@ declare global {
 }
 
 type CustomFixtures = {
+  ctx: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   autoInitScript: void;
 };
 
 export const test = base.extend<CustomFixtures>({
+  /** Create a context to make data passing between steps possible */
+  ctx: async ({}, use) => {
+    await use({});
+  },
+
+  /** Automatically load code into page that we need to make testing possible */
   autoInitScript: [
     async ({ page }, use) => {
       await page.addInitScript({ path: "./dist/playwright-init.js" });

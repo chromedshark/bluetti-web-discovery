@@ -10,6 +10,14 @@ const navigateToDiscovery = Given("I am on the discovery page", async ({ page })
   await expect(page.getByRole("heading", { name: "Register Discovery" })).toBeVisible();
 });
 
+Given("today's date is {string}", async ({ page }, dateStr: string) => {
+  await page.clock.setFixedTime(new Date(dateStr));
+});
+
+Given("no registers have been scanned for this device", () => {
+  // No-op - database starts empty, this step is for readability
+});
+
 Given("no scan is in progress", async ({ page }) => {
   // Verify Stop button is NOT visible (implies no scan running)
   await expect(page.getByRole("button", { name: "Stop" })).not.toBeVisible();
@@ -60,6 +68,28 @@ const previouslyScannedRegisters = Given(
   }
 );
 
+/*Given("I previously scanned this device in an earlier session", async ({ page }) => {
+  await page.evaluate(async () => {
+    const deviceId = navigator.mockBluetooth.currentDevice!.id;
+    await window.appDb.scanResults.bulkAdd([
+      {
+        deviceId,
+        register: 0,
+        readable: true,
+        scannedAt: new Date(),
+        value: new Uint8Array([0, 0]),
+      },
+      {
+        deviceId,
+        register: 1,
+        readable: true,
+        scannedAt: new Date(),
+        value: new Uint8Array([0, 1]),
+      },
+    ]);
+  });
+});*/
+
 Given("a scan has completed", async ({ page }) => {
   await previouslyScannedRegisters({ page }, 0, 10);
 });
@@ -78,6 +108,25 @@ When('I click the "Stop" button after it has scanned some registers', async ({ p
   // Wait for percentage to not be 0 before stopping
   await expect(page.getByText(/([1-9]|[1-9][0-9])%/)).toBeVisible();
   await page.getByRole("button", { name: "Stop" }).click();
+});
+
+When("I run a full scan from {int}-{int}", async ({ page }, start: number, end: number) => {
+  await page.getByLabel("Starting Register").fill(String(start));
+  await page.getByLabel("Ending Register").fill(String(end));
+  await page.getByRole("button", { name: "Scan" }).click();
+  // Wait for scan to complete (progress bar disappears and Scan button returns)
+  await expect(page.getByRole("progressbar")).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Scan" })).toBeVisible();
+});
+
+When("I download the results", async ({ page, ctx }) => {
+  await page.getByRole("button", { name: "Download Results" }).click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Include Data" }).click(),
+  ]);
+  ctx.download = download;
 });
 
 Then("the register scan should start", async ({ page }) => {
@@ -134,7 +183,6 @@ Then('both "Resume" and "Scan" buttons should be disabled', async ({ page }) => 
   await expect(page.getByRole("button", { name: "Scan" })).toBeDisabled();
 });
 
-Then("I should see an option to download the results as JSON", async ({ page }) => {
-  // Placeholder - just check download button exists (can be disabled for now)
-  await expect(page.getByRole("button", { name: /download/i })).toBeVisible();
+Then("the filename should be {string}", async ({ ctx }, expected: string) => {
+  expect(ctx.download.suggestedFilename()).toBe(expected);
 });

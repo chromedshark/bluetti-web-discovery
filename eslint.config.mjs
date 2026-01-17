@@ -10,6 +10,13 @@ export default defineConfig(
   tseslint.configs.recommended,
   eslintConfigPrettier,
   {
+    files: ["features/steps/**/*.ts"],
+    rules: {
+      // Playwright expects fixtures to always use object destructuring
+      "no-empty-pattern": "off",
+    },
+  },
+  {
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",

@@ -2,7 +2,13 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useLocation } from "wouter";
 import { useDevice } from "../context/DeviceContext";
-import { RegisterScanner, ProgressEvent, type RegisterRange } from "../discovery";
+import {
+  RegisterScanner,
+  ProgressEvent,
+  type RegisterRange,
+  hasScanResults,
+  buildExportBlob,
+} from "../discovery";
 
 export function DiscoveryPage() {
   const [, navigate] = useLocation();
@@ -21,6 +27,9 @@ export function DiscoveryPage() {
   // Abort controller for stopping scans
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Dialog ref for export options
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
   // Calculate whether resume is available
   const scannedRegisters = useLiveQuery(
     () => RegisterScanner.getScannedRegisters(device.client),
@@ -31,6 +40,14 @@ export function DiscoveryPage() {
     () => RegisterScanner.calculatePendingRanges(startRegister, endRegister, scannedRegisters),
     [startRegister, endRegister, scannedRegisters]
   );
+
+  // Check if download is available (any scan results exist for this device)
+  const hasResults = useLiveQuery(
+    () => hasScanResults(device.client.id),
+    [device.client.id],
+    false
+  );
+
   useEffect(() => {
     const hasPending = pendingRanges.length > 0;
     const hasAnyScanned =
@@ -82,6 +99,33 @@ export function DiscoveryPage() {
 
   const handleStop = () => {
     abortControllerRef.current?.abort();
+  };
+
+  const handleDownloadClick = () => {
+    dialogRef.current?.showModal();
+  };
+
+  const handleDownload = async (includeData: boolean) => {
+    dialogRef.current?.close();
+
+    const blob = await buildExportBlob(device.client.id, device.deviceType || "Unknown", {
+      includeData,
+    });
+
+    // Generate filename: bluetti-{deviceName}-scan-{YYYY-MM-DD}.json
+    const date = new Date().toISOString().split("T")[0];
+    const name = device.client.deviceName || "unknown";
+    const filename = `bluetti-${name}-scan-${date}.json`;
+
+    // Trigger browser download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -142,7 +186,7 @@ export function DiscoveryPage() {
       </div>
 
       {!scanning && (
-        <button className="secondary-button" disabled>
+        <button className="secondary-button" disabled={!hasResults} onClick={handleDownloadClick}>
           Download Results
         </button>
       )}
@@ -150,6 +194,25 @@ export function DiscoveryPage() {
       <button onClick={handleBack} className="secondary-button">
         Back to Dashboard
       </button>
+
+      <dialog ref={dialogRef} className="export-dialog">
+        <h2>Export Options</h2>
+        <p>
+          Include raw register data? This may contain private information like your wifi connection
+          password and device serial numbers.
+        </p>
+        <div className="dialog-buttons">
+          <button onClick={() => handleDownload(true)} className="primary-button">
+            Include Data
+          </button>
+          <button onClick={() => handleDownload(false)} className="secondary-button">
+            Exclude Data
+          </button>
+          <button onClick={() => dialogRef.current?.close()} className="secondary-button">
+            Cancel
+          </button>
+        </div>
+      </dialog>
     </div>
   );
 }
