@@ -103,7 +103,7 @@ export function DiscoveryPage() {
   const handleDownload = async (includeData: boolean) => {
     dialogRef.current?.close();
 
-    const blob = await buildExportBlob(device.client.id, device.deviceType || "Unknown", {
+    const blob = await buildExportBlob(device.client.id, device.deviceType, {
       includeData,
     });
 
