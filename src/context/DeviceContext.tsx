@@ -4,7 +4,7 @@ import type { BluetoothClient } from "../bluetooth/client";
 export interface DeviceInfo {
   client: BluetoothClient;
   protocolVersion: number;
-  deviceType: string | null;
+  deviceType: string;
 }
 
 interface DeviceContextValue {

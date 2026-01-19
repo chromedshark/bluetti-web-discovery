@@ -13,7 +13,7 @@ export function DeviceInfoCard({ device }: DeviceInfoCardProps) {
         <dd>{device.client.deviceName}</dd>
 
         <dt>Device Type</dt>
-        <dd>{device.deviceType ?? "Unknown"}</dd>
+        <dd>{device.deviceType}</dd>
 
         <dt>Protocol Version</dt>
         <dd>{device.protocolVersion}</dd>

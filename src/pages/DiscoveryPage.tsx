@@ -2,13 +2,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useLocation } from "wouter";
 import { useDevice } from "../context/DeviceContext";
-import {
-  RegisterScanner,
-  ProgressEvent,
-  type RegisterRange,
-  hasScanResults,
-  buildExportBlob,
-} from "../discovery";
+import { RegisterScanner, ProgressEvent, type RegisterRange } from "../tools/scanner";
+import { hasScanResults, buildExportBlob } from "../tools/export";
 
 export function DiscoveryPage() {
   const [, navigate] = useLocation();
@@ -108,7 +103,7 @@ export function DiscoveryPage() {
   const handleDownload = async (includeData: boolean) => {
     dialogRef.current?.close();
 
-    const blob = await buildExportBlob(device.client.id, device.deviceType || "Unknown", {
+    const blob = await buildExportBlob(device.client.id, device.deviceType, {
       includeData,
     });
 

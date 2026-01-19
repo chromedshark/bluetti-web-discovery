@@ -290,6 +290,10 @@ export class BluetoothClient {
     await this.write(res!);
     this.handshakeProtocol = handshakeProtocol;
     await withAbort(handshakeProtocol.sessionKeyPromise(), signal);
+
+    // Encrypted devices expect to recieve a request at the end, or they think
+    // the handshake failed, so request the protocol version register
+    await this.readRegisters(16, 1);
   }
 
   /**

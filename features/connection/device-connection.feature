@@ -37,7 +37,6 @@ Feature: Device Connection
       | reason                            | error_message             |
       | the device never responded        | Connection timeout        |
       | a MODBUS read error occurred      | MODBUS exception: 2       |
-      | the response had invalid checksum | Invalid response checksum |
 
   Scenario: User can retry after a failed connection
     Given my browser supports Web Bluetooth

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { BluetoothClient } from "../bluetooth/client";
+import { DeviceRecognizer } from "../tools/recognizer";
 import { useDevice } from "../context/DeviceContext";
 import { BrowserWarning } from "../components/BrowserWarning";
 import { ErrorDisplay } from "../components/ErrorDisplay";
@@ -9,20 +10,6 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 interface ConnectionError {
   message: string;
   details?: string;
-}
-
-function decodeStringField(bytes: Uint8Array): string {
-  const lastNonNull = bytes.findLastIndex((byte) => byte !== 0);
-  bytes = bytes.subarray(0, lastNonNull + 1);
-  return new TextDecoder("utf-8").decode(bytes);
-}
-
-function decodeSwapStringField(bytes: Uint8Array): string {
-  const registerLength = bytes.length << 1;
-  for (let i = 0; i < registerLength; i++) {
-    [bytes[2 * i], bytes[2 * i + 1]] = [bytes[2 * i + 1]!, bytes[2 * i]!];
-  }
-  return decodeStringField(bytes);
 }
 
 export function ConnectPage() {
@@ -36,6 +23,7 @@ export function ConnectPage() {
     setError(null);
 
     const log: string[] = [];
+    let recognizer: DeviceRecognizer | null = null;
     try {
       log.push("Requesting device...");
       const client = await BluetoothClient.request(window.bluettiKeyBundle);
@@ -43,25 +31,9 @@ export function ConnectPage() {
       log.push("Connecting...");
       await client.connect();
 
-      // Load protocol version
-      log.push("Reading protocol version...");
-      const registers = await client.readRegisters(16, 1);
-      const protocolVersion = new DataView(registers.buffer).getUint16(0, false);
-      log.push(`Protocol version: ${protocolVersion}`);
-
-      // Attempt to load the device type
-      let deviceType: string | null = null;
-      try {
-        await new Promise((r, _) => setTimeout(r, 200));
-        const nameStart = protocolVersion < 2000 ? 10 : 110;
-        const registers = await client.readRegisters(nameStart, 6);
-        deviceType = (protocolVersion < 2000 ? decodeStringField : decodeSwapStringField)(
-          registers
-        );
-        log.push(`Device type: ${deviceType}`);
-      } catch (e) {
-        log.push(`Failed to read device name: ${e}`);
-      }
+      log.push("Recognizing device...");
+      recognizer = new DeviceRecognizer(client);
+      const { protocolVersion, deviceType } = await recognizer.recognize();
 
       setDevice({ client, protocolVersion, deviceType });
       navigate("/dashboard");
@@ -69,6 +41,21 @@ export function ConnectPage() {
       if (error instanceof DOMException && error.name === "NotFoundError") {
         // This is a cancellation, so don't display an error message
       } else {
+        if (recognizer) {
+          for (const entry of recognizer.log) {
+            switch (entry.type) {
+              case "started":
+                log.push(`Reading ${entry.field}...`);
+                break;
+              case "success":
+                log.push(`Read ${entry.field}: ${entry.value}`);
+                break;
+              case "error":
+                log.push(`Error: ${entry.error.message}`);
+                break;
+            }
+          }
+        }
         const message = error instanceof Error ? error.message : String(error);
         log.push(`Error: ${message}`);
         setError({ message, details: log.join("\n") });

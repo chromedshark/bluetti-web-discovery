@@ -13,8 +13,8 @@ export interface DeviceRecord {
   /** Protocol version */
   protocolVersion: number;
 
-  /** Device type if known */
-  deviceType: string | null;
+  /** Device type */
+  deviceType: string;
 }
 
 /**

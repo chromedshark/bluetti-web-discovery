@@ -45,7 +45,7 @@ function TestConnectRoute() {
     (async () => {
       const params = new URLSearchParams(window.location.hash.split("?")[1]);
       const protocolVersion = parseInt(params.get("protocolVersion")!, 10);
-      const deviceType = params.get("deviceType");
+      const deviceType = params.get("deviceType")!;
 
       const client = await BluetoothClient.request(window.bluettiKeyBundle);
       await client.connect();
