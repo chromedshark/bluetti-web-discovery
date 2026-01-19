@@ -5,6 +5,7 @@ import {
   TimeoutError,
   type ConnectionOptions,
 } from "../bluetooth/client";
+import { StringField, SwapStringField, Uint16Field, type Field } from "../fields";
 import { delay } from "../utils/delay";
 
 export interface RecognizableDevice {
@@ -33,52 +34,21 @@ export interface RecognizeOptions {
 /**
  * A log entry for the recognition process.
  */
-type LogEntryField = "protocolVersion" | "deviceType";
 interface StartedLogEntry {
   type: "started";
-  field: LogEntryField;
+  field: string;
 }
 interface SucceededLogEntry {
   type: "success";
-  field: LogEntryField;
+  field: string;
   value: number | string;
 }
 interface ErrorLogEntry {
   type: "error";
-  field: LogEntryField;
+  field: string;
   error: Error;
 }
 export type LogEntry = StartedLogEntry | SucceededLogEntry | ErrorLogEntry;
-
-interface FieldConfig {
-  name: LogEntryField;
-  register: number;
-  byteSize: number;
-  parse: (bytes: Uint8Array) => string | number;
-}
-
-/**
- * Decodes a string field from register data (for protocol version < 2000).
- */
-function decodeStringField(bytes: Uint8Array): string {
-  const lastNonNull = bytes.findLastIndex((byte) => byte !== 0);
-  bytes = bytes.subarray(0, lastNonNull + 1);
-  return new TextDecoder("utf-8").decode(bytes);
-}
-
-/**
- * Decodes a swap string field from register data (for protocol version >= 2000).
- * Bytes within each 16-bit register are swapped.
- */
-function decodeSwapStringField(bytes: Uint8Array): string {
-  // Create a copy to avoid mutating the original
-  const swapped = new Uint8Array(bytes);
-  for (let i = 0; i < bytes.length; i += 2) {
-    swapped[i] = bytes[i + 1]!;
-    swapped[i + 1] = bytes[i]!;
-  }
-  return decodeStringField(swapped);
-}
 
 /**
  * Recognizes a Bluetti device by reading its protocol version and device type.
@@ -124,16 +94,10 @@ export class DeviceRecognizer {
   private async queryDevice(options: RecognizeOptions): Promise<DeviceRecord> {
     const retryDelay = options.retryDelay ?? DEFAULT_RETRY_DELAY;
 
-    // Read protocol version
-    let field = this.getProtocolVersionField();
-    const protocolVersion = (await this.readWithRetry(field, options)) as number;
-
-    // Delay before reading device type
-    await delay(retryDelay);
-
-    // Read device type
-    field = this.getDeviceTypeField(protocolVersion);
-    const deviceType = (await this.readWithRetry(field, options)) as string;
+    // Query device
+    const protocolVersion = await this.readWithRetry(this.getProtocolVersionField(), options);
+    await delay(retryDelay); // Delay before reading device type
+    const deviceType = await this.readWithRetry(this.getDeviceTypeField(protocolVersion), options);
 
     return {
       id: this.device.id,
@@ -146,10 +110,10 @@ export class DeviceRecognizer {
   /**
    * Reads registers with retry logic for timeout and checksum errors.
    */
-  private async readWithRetry(
-    field: FieldConfig,
+  private async readWithRetry<T extends string | number>(
+    field: Field<T, unknown>,
     options: RecognizeOptions
-  ): Promise<string | number> {
+  ): Promise<T> {
     const timeout = options.timeout ?? DEFAULT_TIMEOUT;
     const retryLimit = options.retryLimit ?? DEFAULT_RETRY_LIMIT;
     const retryDelay = options.retryDelay ?? DEFAULT_RETRY_DELAY;
@@ -160,7 +124,7 @@ export class DeviceRecognizer {
       this.logStarted(field.name);
       try {
         const bytes = await this.device.readRegisters(
-          field.register,
+          field.location.register,
           Math.ceil(field.byteSize / 2),
           { timeout: timeout }
         );
@@ -189,38 +153,30 @@ export class DeviceRecognizer {
   /**
    * Builds a field config for the protocol version
    */
-  private getProtocolVersionField(): FieldConfig {
-    return {
-      name: "protocolVersion",
-      register: 16,
-      byteSize: 2,
-      parse: (bytes: Uint8Array): number => {
-        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        return view.getUint16(0);
-      },
-    };
+  private getProtocolVersionField() {
+    return new Uint16Field({ register: 16 }, "protocol_version");
   }
 
   /**
    * Builds a field config for the device type
    */
-  private getDeviceTypeField(protocolVersion: number): FieldConfig {
+  private getDeviceTypeField(protocolVersion: number) {
     if (protocolVersion < 2000) {
-      return { name: "deviceType", register: 10, byteSize: 12, parse: decodeStringField };
+      return new StringField({ register: 10 }, "device_type", 6);
     } else {
-      return { name: "deviceType", register: 110, byteSize: 12, parse: decodeSwapStringField };
+      return new SwapStringField({ register: 110 }, "device_type", 6);
     }
   }
 
-  private logStarted(field: LogEntryField): void {
+  private logStarted(field: string): void {
     this._log.push({ type: "started", field });
   }
 
-  private logSuccess(field: LogEntryField, value: number | string): void {
+  private logSuccess(field: string, value: number | string): void {
     this._log.push({ type: "success", field, value });
   }
 
-  private logError(field: LogEntryField, error: Error): void {
+  private logError(field: string, error: Error): void {
     this._log.push({ type: "error", field, error });
   }
 }

@@ -9,7 +9,7 @@ import { SwapStringField } from "./swap-string";
 import { Uint16Field } from "./uint16";
 import { VersionField } from "./version";
 
-export type { RegisterLocation } from "./shared";
+export type { Field, RegisterLocation } from "./shared";
 export { fieldSchema } from "./schema";
 export {
   BoolField,
