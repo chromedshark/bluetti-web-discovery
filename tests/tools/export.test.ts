@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { db, type ScanResultRecord } from "../../src/database";
-import { buildExportBlob, hasScanResults, type ExportResult } from "../../src/discovery/export.ts";
+import { buildExportBlob, hasScanResults, type ExportResult } from "../../src/tools/export";
 
 const TEST_DEVICE_ID = "test-device";
 const TEST_DEVICE_TYPE = "AC300";
