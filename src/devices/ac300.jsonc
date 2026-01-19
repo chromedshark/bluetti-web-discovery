@@ -1,0 +1,583 @@
+{
+  "type": "AC300",
+  "readableRegisters": [
+    { "start": 0, "end": 209 },
+    { "start": 1080, "end": 2026 },
+    { "start": 3000, "end": 3061 },
+    { "start": 5000, "end": 5056 },
+    { "start": 9000, "end": 9009 },
+  ],
+  "fields": [
+    {
+      "type": "string",
+      "location": { "register": 10 },
+      "name": "device_type",
+      "size": 6,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 16 },
+      "name": "protocol_version",
+    },
+
+    {
+      "type": "serialNumber",
+      "location": { "register": 17 },
+      "name": "serial_number",
+    },
+
+    {
+      "type": "version",
+      "location": { "register": 23 },
+      "name": "arm_version",
+    },
+
+    {
+      "type": "version",
+      "location": { "register": 25 },
+      "name": "dsp_version",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 36 },
+      "name": "dc_input_power",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 37 },
+      "name": "ac_input_power",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 38 },
+      "name": "ac_output_power",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 39 },
+      "name": "dc_output_power",
+    },
+
+    // Total power generated since last reset (kwh)
+    {
+      "type": "decimal",
+      "location": { "register": 41 },
+      "name": "power_generation",
+      "scale": 1,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 43 },
+      "name": "total_battery_percent",
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 48 },
+      "name": "ac_output_on",
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 49 },
+      "name": "dc_output_on",
+    },
+
+    {
+      "type": "enum",
+      "location": { "register": 70 },
+      "name": "ac_output_mode",
+      "values": {
+        "Stop": 0,
+        "Inverter Output": 1,
+        "Bypass Output-C": 2,
+        "Bypass Output-D": 3,
+        "Load Matching": 4,
+      },
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 71 },
+      "name": "internal_ac_voltage",
+      "scale": 1,
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 72 },
+      "name": "internal_current_one",
+      "scale": 1,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 73 },
+      "name": "internal_power_one",
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 74 },
+      "name": "internal_ac_frequency",
+      "scale": 2,
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 75 },
+      "name": "internal_current_two",
+      "scale": 1,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 76 },
+      "name": "internal_power_two",
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 77 },
+      "name": "ac_input_voltage",
+      "scale": 1,
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 78 },
+      "name": "internal_current_three",
+      "scale": 1,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 79 },
+      "name": "internal_power_three",
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 80 },
+      "name": "ac_input_frequency",
+      "scale": 2,
+    },
+
+    // This is the 12v output voltage
+    {
+      "type": "decimal",
+      "location": { "register": 83 },
+      "name": "internal_dc_output_voltage",
+      "scale": 1,
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 86 },
+      "name": "internal_dc_input_voltage",
+      "scale": 1,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 87 },
+      "name": "internal_dc_input_power",
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 88 },
+      "name": "internal_dc_input_current",
+      "scale": 1,
+    },
+
+    // The maximum number of attached battery packs, including internal battery
+    {
+      "type": "uint16",
+      "location": { "register": 91 },
+      "name": "pack_num_max",
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 92 },
+      "name": "total_battery_voltage",
+      "scale": 1,
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 93 },
+      "name": "total_battery_current",
+      "scale": 1,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 94 },
+      "name": "total_battery_percent",
+    },
+
+    // This is definitely a temperature sensor but I do not know the units
+    {
+      "type": "uint16",
+      "location": { "register": 95 },
+      "name": "battery_temperature",
+    },
+
+    // The current selected battery pack for data
+    {
+      "type": "uint16",
+      "location": { "register": 96 },
+      "name": "pack_num",
+    },
+
+    {
+      "type": "enum",
+      "location": { "register": 97 },
+      "name": "pack_status",
+      "values": {
+        "Standby": 0,
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    {
+      "type": "decimal",
+      "location": { "register": 98 },
+      "name": "pack_voltage",
+      "scale": 2,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 99 },
+      "name": "pack_battery_percent",
+    },
+
+    // This appears to be identical to the other status field
+    {
+      "type": "enum",
+      "location": { "register": 100 },
+      "name": "pack_status",
+      "values": {
+        "Standby": 0,
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    {
+      "type": "decimalArray",
+      "location": { "register": 105 },
+      "name": "cell_voltages",
+      "size": 16,
+      "scale": 2,
+    },
+
+    {
+      "type": "version",
+      "location": { "register": 201 },
+      "name": "pack_bms_version",
+    },
+
+    {
+      "type": "enum",
+      "location": { "register": 3001 },
+      "name": "ups_mode",
+      "values": {
+        "Customized UPS": 1,
+        "PV Priority UPS": 2,
+        "Standard UPS": 3,
+        "Time Control UPS": 4,
+      },
+    },
+
+    // Used to better tolerate fluctuating quality grid input
+    {
+      "type": "bool",
+      "location": { "register": 3002 },
+      "name": "grid_adaptation_on",
+    },
+
+    {
+      "type": "enum",
+      "location": { "register": 3003 },
+      "name": "ac_output_frequency",
+      "values": {
+        "50Hz": 0,
+        "60Hz": 1,
+      },
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 3004 },
+      "name": "split_phase_on",
+    },
+
+    {
+      "type": "enum",
+      "location": { "register": 3005 },
+      "name": "split_phase_machine_mode",
+      "values": {
+        "Slave": 0,
+        "Master": 1,
+      },
+    },
+
+    // The current selected battery pack for data (control register)
+    {
+      "type": "uint16",
+      "location": { "register": 3006 },
+      "name": "pack_num",
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 3007 },
+      "name": "ac_output_on",
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 3008 },
+      "name": "dc_output_on",
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 3011 },
+      "name": "grid_charge_on",
+    },
+
+    {
+      "type": "bool",
+      "location": { "register": 3013 },
+      "name": "time_control_on",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 3015 },
+      "name": "battery_range_start",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 3016 },
+      "name": "battery_range_end",
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 3019 },
+      "name": "max_ac_input_current",
+    },
+
+    // When a 1 is written to this address, the power_generation field is reset to zero
+    {
+      "type": "bool",
+      "location": { "register": 3022 },
+      "name": "power_generation_reset",
+    },
+
+    // TODO: needs "date" field type
+    // {
+    //   "type": "date",
+    //   "location": { "register": 3031 },
+    //   "name": "device_time",
+    // },
+
+    {
+      "type": "bool",
+      "location": { "register": 3036 },
+      "name": "bluetooth_connected",
+    },
+
+    {
+      "type": "enum",
+      "location": { "register": 3039 },
+      "name": "time_one_mode",
+      "values": {
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    // TODO: needs "time" field type
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3040 },
+    //   "name": "time_one_start",
+    // },
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3041 },
+    //   "name": "time_one_end",
+    // },
+
+    {
+      "type": "enum",
+      "location": { "register": 3042 },
+      "name": "time_two_mode",
+      "values": {
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    // TODO: needs "time" field type
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3043 },
+    //   "name": "time_two_start",
+    // },
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3044 },
+    //   "name": "time_two_end",
+    // },
+
+    {
+      "type": "enum",
+      "location": { "register": 3045 },
+      "name": "time_three_mode",
+      "values": {
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    // TODO: needs "time" field type
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3046 },
+    //   "name": "time_three_start",
+    // },
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3047 },
+    //   "name": "time_three_end",
+    // },
+
+    {
+      "type": "enum",
+      "location": { "register": 3048 },
+      "name": "time_four_mode",
+      "values": {
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    // TODO: needs "time" field type
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3049 },
+    //   "name": "time_four_start",
+    // },
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3050 },
+    //   "name": "time_four_end",
+    // },
+
+    {
+      "type": "enum",
+      "location": { "register": 3051 },
+      "name": "time_five_mode",
+      "values": {
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    // TODO: needs "time" field type
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3052 },
+    //   "name": "time_five_start",
+    // },
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3053 },
+    //   "name": "time_five_end",
+    // },
+
+    {
+      "type": "enum",
+      "location": { "register": 3054 },
+      "name": "time_six_mode",
+      "values": {
+        "Charge": 1,
+        "Discharge": 2,
+      },
+    },
+
+    // TODO: needs "time" field type
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3055 },
+    //   "name": "time_six_start",
+    // },
+    // {
+    //   "type": "time",
+    //   "location": { "register": 3056 },
+    //   "name": "time_six_end",
+    // },
+
+    {
+      "type": "enum",
+      "location": { "register": 3061 },
+      "name": "auto_sleep_mode",
+      "values": {
+        "30s": 2,
+        "1 min": 3,
+        "5 min": 4,
+        "Never": 5,
+      },
+    },
+
+    // TODO: needs "ipAddress" field type
+    // {
+    //   "type": "ipAddress",
+    //   "location": { "register": 5004 },
+    //   "name": "device_ip",
+    // },
+
+    // TODO: needs "macAddress" field type
+    // {
+    //   "type": "macAddress",
+    //   "location": { "register": 5006 },
+    //   "name": "mac_address",
+    // },
+
+    {
+      "type": "swapString",
+      "location": { "register": 5017 },
+      "name": "essid",
+      "size": 16,
+    },
+
+    {
+      "type": "swapString",
+      "location": { "register": 5033 },
+      "name": "wifi_password",
+      "size": 16,
+    },
+
+    {
+      "type": "uint16",
+      "location": { "register": 5049 },
+      "name": "wifi_signal_strength",
+    },
+  ],
+}

@@ -12,9 +12,10 @@
     "format:check": "prettier --check .",
     "test": "bun test",
     "test:features": "bunx bddgen && bunx playwright test",
-    "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
+    "check": "bun run validate && bun run typecheck && bun run lint && bun run format:check && bun test",
     "serve": "bun ./src/index.html",
-    "serve:test": "bun ./test-server.ts"
+    "serve:test": "bun ./test-server.ts",
+    "validate": "bun ./validate.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
