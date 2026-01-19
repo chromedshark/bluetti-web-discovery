@@ -1,5 +1,5 @@
 import { MAX_REGISTERS_PER_REQUEST } from "../bluetooth/constants.ts";
-import { db, type ScanResultRecord } from "../database/db.ts";
+import { db, type ScanResultRecord } from "../database";
 
 export interface ScannableDevice {
   id: string;

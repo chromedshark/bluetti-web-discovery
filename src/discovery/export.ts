@@ -1,4 +1,4 @@
-import { db, type ScanResultRecord } from "../database/db.ts";
+import { db, type ScanResultRecord } from "../database";
 
 export interface ExportRange {
   /** First register in range (inclusive) */

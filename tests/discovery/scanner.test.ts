@@ -3,7 +3,7 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { RegisterMemory } from "../../src/testing/register-memory.ts";
 import { RegisterScanner, ProgressEvent } from "../../src/discovery/index.ts";
 import type { ScannableDevice } from "../../src/discovery/index.ts";
-import { db } from "../../src/database/db.ts";
+import { db } from "../../src/database";
 
 /**
  * Creates a ScannableDevice from RegisterMemory with configurable readable ranges.

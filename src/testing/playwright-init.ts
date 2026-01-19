@@ -1,5 +1,5 @@
 import { MockBluetoothDevice } from "./mock-bluetooth-device";
-import { db } from "../database/db";
+import { db } from "../database";
 import type { MockBluetoothDeviceConfig } from "./mock-bluetooth-device";
 
 export class BluetoothMock {
